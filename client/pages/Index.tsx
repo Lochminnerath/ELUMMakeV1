@@ -88,8 +88,10 @@ export default function Index() {
     [firstName, lastName],
   );
 
-  const progress1 = useProgress(2400, step === "processing1");
-  const progress2 = useProgress(2200, step === "processing2");
+  const [duration1, setDuration1] = useState<number>(2400);
+  const [duration2, setDuration2] = useState<number>(2200);
+  const progress1 = useProgress(duration1, step === "processing1");
+  const progress2 = useProgress(duration2, step === "processing2");
   const [rebookPulse, setRebookPulse] = useState(false);
 
   useEffect(() => {
@@ -120,10 +122,14 @@ export default function Index() {
 
   useEffect(() => {
     if (step === "processing1") {
-      const t = setTimeout(() => setStep("welcome"), 2500);
+      const d = Math.floor(1800 + Math.random() * 2200);
+      setDuration1(d);
+      const t = setTimeout(() => setStep("welcome"), d + 150);
       return () => clearTimeout(t);
     }
     if (step === "processing2") {
+      const d = Math.floor(1800 + Math.random() * 2600);
+      setDuration2(d);
       const t = setTimeout(() => {
         const g = generateBenefitCode();
         setGenerated(g);
@@ -131,7 +137,7 @@ export default function Index() {
           localStorage.setItem("sl_cancel_code", g.code);
         } catch {}
         setStep("confirmed");
-      }, 2400);
+      }, d + 150);
       return () => clearTimeout(t);
     }
   }, [step]);
@@ -205,9 +211,9 @@ export default function Index() {
 
               {step === "processing1" && (
                 <div className="space-y-6">
-                  <p className="text-lg">Preparing your experience…</p>
+                  <p className="text-lg">Processing securely…</p>
                   <Progress value={progress1} />
-                  <p className="text-sm text-muted-foreground">This only takes a few seconds.</p>
+                  <p className="text-sm text-muted-foreground">Verifying your details. This only takes a few seconds.</p>
                 </div>
               )}
 
