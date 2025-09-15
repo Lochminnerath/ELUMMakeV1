@@ -249,7 +249,7 @@ export default function Index() {
                       </Button>
                     </div>
                     <div className="mt-3 flex flex-wrap items-baseline gap-3">
-                      <span className="text-2xl font-bold tabular-nums">
+                      <span className="animated-code text-3xl font-extrabold tabular-nums">
                         {generated.code}
                       </span>
                       <span className="rounded-full bg-secondary px-3 py-1 text-xs">
