@@ -107,3 +107,26 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  @keyframes code-gradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes code-sway {
+    0% { transform: rotate(-1deg) translateY(0); }
+    50% { transform: rotate(1deg) translateY(-2px); }
+    100% { transform: rotate(-1deg) translateY(0); }
+  }
+  .animated-code {
+    background-image: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--primary)));
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.05);
+    animation: code-gradient 6s ease infinite, code-sway 8s ease-in-out infinite;
+    letter-spacing: 0.04em;
+  }
+}
