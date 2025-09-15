@@ -11,6 +11,17 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { PlaneTakeoff, TicketCheck, CheckCircle2, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type Step =
   | "form"
@@ -210,14 +221,31 @@ export default function Index() {
                       We’re sorry plans changed.
                     </p>
                   </div>
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    className="h-14 text-lg px-8"
-                    onClick={() => setStep("processing2")}
-                  >
-                    Cancel my flight
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="lg"
+                        variant="destructive"
+                        className="h-14 text-lg px-8"
+                      >
+                        Cancel my flight
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm cancellation</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will cancel your current flight. You can rebook afterward.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep my flight</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => setStep("processing2")}>
+                          Confirm cancel
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               )}
 
