@@ -25,6 +25,9 @@ import {
 
 type Step =
   | "form"
+  | "perks"
+  | "perksDigits"
+  | "processingPerks"
   | "processing1"
   | "welcome"
   | "processing2"
@@ -78,6 +81,7 @@ export default function Index() {
   const [step, setStep] = useState<Step>("form");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [last4, setLast4] = useState("");
   const [generated, setGenerated] = useState<{
     code: string;
     ending: string;
@@ -88,8 +92,10 @@ export default function Index() {
     [firstName, lastName],
   );
 
+  const [durationP, setDurationP] = useState<number>(1600);
   const [duration1, setDuration1] = useState<number>(2400);
   const [duration2, setDuration2] = useState<number>(2200);
+  const progressP = useProgress(durationP, step === "processingPerks");
   const progress1 = useProgress(duration1, step === "processing1");
   const progress2 = useProgress(duration2, step === "processing2");
   const [rebookPulse, setRebookPulse] = useState(false);
@@ -121,6 +127,12 @@ export default function Index() {
   }, [step]);
 
   useEffect(() => {
+    if (step === "processingPerks") {
+      const d = Math.floor(1200 + Math.random() * 1600);
+      setDurationP(d);
+      const t = setTimeout(() => setStep("processing1"), d + 120);
+      return () => clearTimeout(t);
+    }
     if (step === "processing1") {
       const d = Math.floor(1800 + Math.random() * 2200);
       setDuration1(d);
@@ -197,7 +209,7 @@ export default function Index() {
                     <Button
                       size="lg"
                       className="px-8"
-                      onClick={() => setStep("processing1")}
+                      onClick={() => setStep("perks")}
                       disabled={disabled}
                     >
                       Continue
@@ -206,6 +218,52 @@ export default function Index() {
                       We’ll verify your details securely.
                     </p>
                   </div>
+                </div>
+              )}
+
+              {step === "perks" && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-semibold">Do you have a perks card?</h3>
+                  <div className="flex gap-3">
+                    <Button onClick={() => setStep("perksDigits")}>Yes</Button>
+                    <Button variant="secondary" onClick={() => setStep("processing1")}>No</Button>
+                  </div>
+                </div>
+              )}
+
+              {step === "perksDigits" && (
+                <div className="space-y-6">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">Last 4 digits of your card</label>
+                    <Input
+                      inputMode="numeric"
+                      pattern="\\d{4}"
+                      maxLength={4}
+                      placeholder="1234"
+                      value={last4}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^0-9]/g, "").slice(0, 4);
+                        setLast4(v);
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={() => setStep("processingPerks")}
+                      disabled={last4.length !== 4}
+                    >
+                      Verify
+                    </Button>
+                    <Button variant="ghost" onClick={() => setStep("perks")}>Back</Button>
+                  </div>
+                </div>
+              )}
+
+              {step === "processingPerks" && (
+                <div className="space-y-6">
+                  <p className="text-lg">Validating perks securely…</p>
+                  <Progress value={progressP} />
+                  <p className="text-sm text-muted-foreground">Checking your perks details.</p>
                 </div>
               )}
 
