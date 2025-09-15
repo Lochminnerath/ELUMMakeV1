@@ -223,10 +223,17 @@ export default function Index() {
 
               {step === "perks" && (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-semibold">Do you have a perks card?</h3>
+                  <h3 className="text-xl font-semibold">
+                    Do you have a perks card?
+                  </h3>
                   <div className="flex gap-3">
                     <Button onClick={() => setStep("perksDigits")}>Yes</Button>
-                    <Button variant="secondary" onClick={() => setStep("processing1")}>No</Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setStep("processing1")}
+                    >
+                      No
+                    </Button>
                   </div>
                 </div>
               )}
@@ -234,7 +241,9 @@ export default function Index() {
               {step === "perksDigits" && (
                 <div className="space-y-6">
                   <div>
-                    <label className="mb-2 block text-sm font-medium">Last 4 digits of your card</label>
+                    <label className="mb-2 block text-sm font-medium">
+                      Last 4 digits of your card
+                    </label>
                     <Input
                       inputMode="numeric"
                       pattern="\\d{4}"
@@ -242,7 +251,9 @@ export default function Index() {
                       placeholder="1234"
                       value={last4}
                       onChange={(e) => {
-                        const v = e.target.value.replace(/[^0-9]/g, "").slice(0, 4);
+                        const v = e.target.value
+                          .replace(/[^0-9]/g, "")
+                          .slice(0, 4);
                         setLast4(v);
                       }}
                     />
@@ -254,7 +265,9 @@ export default function Index() {
                     >
                       Verify
                     </Button>
-                    <Button variant="ghost" onClick={() => setStep("perks")}>Back</Button>
+                    <Button variant="ghost" onClick={() => setStep("perks")}>
+                      Back
+                    </Button>
                   </div>
                 </div>
               )}
@@ -263,7 +276,9 @@ export default function Index() {
                 <div className="space-y-6">
                   <p className="text-lg">Validating perks securely…</p>
                   <Progress value={progressP} />
-                  <p className="text-sm text-muted-foreground">Checking your perks details.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Checking your perks details.
+                  </p>
                 </div>
               )}
 
@@ -271,7 +286,9 @@ export default function Index() {
                 <div className="space-y-6">
                   <p className="text-lg">Processing securely…</p>
                   <Progress value={progress1} />
-                  <p className="text-sm text-muted-foreground">Verifying your details. This only takes a few seconds.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Verifying your details. This only takes a few seconds.
+                  </p>
                 </div>
               )}
 
@@ -279,7 +296,7 @@ export default function Index() {
                 <div className="space-y-6">
                   <div>
                     <h2 className="text-2xl font-semibold">
-                      Welcome back{ name ? `, ${name.split(" ")[0]}` : "" }.
+                      Welcome back{name ? `, ${name.split(" ")[0]}` : ""}.
                     </h2>
                     <p className="text-muted-foreground">
                       We’re sorry plans changed.
@@ -297,14 +314,19 @@ export default function Index() {
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Confirm cancellation</AlertDialogTitle>
+                        <AlertDialogTitle>
+                          Confirm cancellation
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will cancel your current flight. You can rebook afterward.
+                          This will cancel your current flight. You can rebook
+                          afterward.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Keep my flight</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => setStep("processing2")}>
+                        <AlertDialogAction
+                          onClick={() => setStep("processing2")}
+                        >
                           Confirm cancel
                         </AlertDialogAction>
                       </AlertDialogFooter>
@@ -325,7 +347,9 @@ export default function Index() {
                 <div className="space-y-6">
                   <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                     <CheckCircle2 className="h-6 w-6" />
-                    <h3 className="text-xl font-semibold">We’ve confirmed your cancellation.</h3>
+                    <h3 className="text-xl font-semibold">
+                      We’ve confirmed your cancellation.
+                    </h3>
                   </div>
 
                   <div className={cn("rounded-lg border p-4 bg-muted/30")}>
@@ -349,10 +373,14 @@ export default function Index() {
                       </span>
                     </div>
                     <p className="mt-3 text-sm">
-                      {generated.ending === "500" && "500: You’ll receive vouchers you can apply to future journeys."}
-                      {generated.ending === "600" && "600: One flight within the first 3 weeks from today."}
-                      {generated.ending === "700" && "700: Monetary compensation will be arranged."}
-                      {generated.ending === "800" && "800: Full refund plus an additional flight on us."}
+                      {generated.ending === "500" &&
+                        "500: You’ll receive vouchers you can apply to future journeys."}
+                      {generated.ending === "600" &&
+                        "600: One flight within the first 3 weeks from today."}
+                      {generated.ending === "700" &&
+                        "700: Monetary compensation will be arranged."}
+                      {generated.ending === "800" &&
+                        "800: Full refund plus an additional flight on us."}
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
                       Save this code now. We don’t store it for you.
@@ -366,7 +394,12 @@ export default function Index() {
                       rel="noreferrer"
                       className="w-full sm:w-auto"
                     >
-                      <Button size="lg" className={cn("w-full", rebookPulse && "btn-attention")}>Rebook</Button>
+                      <Button
+                        size="lg"
+                        className={cn("w-full", rebookPulse && "btn-attention")}
+                      >
+                        Rebook
+                      </Button>
                     </a>
                     <a
                       href="https://slairlines.netlify.app"
@@ -374,7 +407,9 @@ export default function Index() {
                       rel="noreferrer"
                       className="w-full sm:w-auto"
                     >
-                      <Button size="lg" className="w-full">Proceed to your account</Button>
+                      <Button size="lg" className="w-full">
+                        Proceed to your account
+                      </Button>
                     </a>
                     <a href="/benefits" className="w-full sm:w-auto">
                       <Button size="lg" variant="secondary" className="w-full">
