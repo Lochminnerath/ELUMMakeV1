@@ -1,62 +1,266 @@
-import { DemoResponse } from "@shared/api";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { PlaneTakeoff, TicketCheck, CheckCircle2, Copy } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type Step =
+  | "form"
+  | "processing1"
+  | "welcome"
+  | "processing2"
+  | "confirmed";
+
+function useProgress(durationMs: number, active: boolean) {
+  const [value, setValue] = useState(0);
+  const raf = useRef<number | null>(null);
+  const startTs = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const step = (ts: number) => {
+      if (startTs.current == null) startTs.current = ts;
+      const elapsed = ts - startTs.current;
+      const pct = Math.min(100, (elapsed / durationMs) * 100);
+      setValue(pct);
+      if (pct < 100) {
+        raf.current = requestAnimationFrame(step);
+      }
+    };
+    raf.current = requestAnimationFrame(step);
+    return () => {
+      if (raf.current) cancelAnimationFrame(raf.current);
+      startTs.current = null;
+      setValue(0);
+    };
+  }, [durationMs, active]);
+
+  return value;
+}
+
+function generateBenefitCode() {
+  const endings = ["500", "600", "700", "800"] as const;
+  const ending = endings[Math.floor(Math.random() * endings.length)];
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let body = "";
+  for (let i = 0; i < 8; i++) {
+    body += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  const code = `SL-${body}-${ending}`;
+  let benefit = "";
+  if (ending === "500") benefit = "Vouchers issued";
+  if (ending === "600") benefit = "One flight within the first 3 weeks";
+  if (ending === "700") benefit = "Cash compensation";
+  if (ending === "800") benefit = "Full refund plus an additional flight";
+  return { code, ending, benefit };
+}
 
 export default function Index() {
-  const [exampleFromServer, setExampleFromServer] = useState("");
-  // Fetch users on component mount
-  useEffect(() => {
-    fetchDemo();
-  }, []);
+  const [step, setStep] = useState<Step>("form");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [generated, setGenerated] = useState<{
+    code: string;
+    ending: string;
+    benefit: string;
+  } | null>(null);
+  const name = useMemo(
+    () => `${firstName.trim()} ${lastName.trim()}`.trim(),
+    [firstName, lastName],
+  );
 
-  // Example of how to fetch data from the server (if needed)
-  const fetchDemo = async () => {
-    try {
-      const response = await fetch("/api/demo");
-      const data = (await response.json()) as DemoResponse;
-      setExampleFromServer(data.message);
-    } catch (error) {
-      console.error("Error fetching hello:", error);
+  const progress1 = useProgress(2400, step === "processing1");
+  const progress2 = useProgress(2200, step === "processing2");
+
+  useEffect(() => {
+    if (step === "processing1") {
+      const t = setTimeout(() => setStep("welcome"), 2500);
+      return () => clearTimeout(t);
     }
+    if (step === "processing2") {
+      const t = setTimeout(() => {
+        const g = generateBenefitCode();
+        setGenerated(g);
+        try {
+          localStorage.setItem("sl_cancel_code", g.code);
+        } catch {}
+        setStep("confirmed");
+      }, 2400);
+      return () => clearTimeout(t);
+    }
+  }, [step]);
+
+  const disabled = !firstName.trim() || !lastName.trim();
+
+  const onCopy = async () => {
+    if (!generated) return;
+    try {
+      await navigator.clipboard.writeText(generated.code);
+      alert("Code copied. Please save this code for your records.");
+    } catch {}
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-      <div className="text-center">
-        {/* TODO: FUSION_GENERATION_APP_PLACEHOLDER replace everything here with the actual app! */}
-        <h1 className="text-2xl font-semibold text-slate-800 flex items-center justify-center gap-3">
-          <svg
-            className="animate-spin h-8 w-8 text-slate-400"
-            viewBox="0 0 50 50"
-          >
-            <circle
-              className="opacity-30"
-              cx="25"
-              cy="25"
-              r="20"
-              stroke="currentColor"
-              strokeWidth="5"
-              fill="none"
-            />
-            <circle
-              className="text-slate-600"
-              cx="25"
-              cy="25"
-              r="20"
-              stroke="currentColor"
-              strokeWidth="5"
-              fill="none"
-              strokeDasharray="100"
-              strokeDashoffset="75"
-            />
-          </svg>
-          Generating your app...
-        </h1>
-        <p className="mt-4 text-slate-600 max-w-md">
-          Watch the chat on the left for updates that might need your attention
-          to finish generating
-        </p>
-        <p className="mt-4 hidden max-w-md">{exampleFromServer}</p>
-      </div>
-    </div>
+    <main className="min-h-screen bg-[radial-gradient(1200px_600px_at_80%_-10%,hsl(var(--accent)/.35),transparent),radial-gradient(800px_400px_at_10%_20%,hsl(var(--secondary)/.8),transparent)] from-background to-background">
+      <section className="container py-16 md:py-24">
+        <div className="mx-auto max-w-3xl">
+          <Card className="backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-white/5 border-0 shadow-xl">
+            <CardHeader className="flex flex-col gap-1">
+              <div className="flex items-center gap-3 text-primary">
+                <PlaneTakeoff className="h-6 w-6" />
+                <CardTitle className="text-3xl">Flight Cancellation</CardTitle>
+              </div>
+              <CardDescription>
+                Manage a cancellation in a few simple steps.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {step === "form" && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">
+                        First name
+                      </label>
+                      <Input
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="John"
+                        autoComplete="given-name"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">
+                        Last name
+                      </label>
+                      <Input
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Doe"
+                        autoComplete="family-name"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      size="lg"
+                      className="px-8"
+                      onClick={() => setStep("processing1")}
+                      disabled={disabled}
+                    >
+                      Continue
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      We’ll verify your details securely.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {step === "processing1" && (
+                <div className="space-y-6">
+                  <p className="text-lg">Preparing your experience…</p>
+                  <Progress value={progress1} />
+                  <p className="text-sm text-muted-foreground">This only takes a few seconds.</p>
+                </div>
+              )}
+
+              {step === "welcome" && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-semibold">
+                      Welcome back{ name ? `, ${name.split(" ")[0]}` : "" }.
+                    </h2>
+                    <p className="text-muted-foreground">
+                      We’re sorry plans changed.
+                    </p>
+                  </div>
+                  <Button
+                    size="lg"
+                    variant="destructive"
+                    className="h-14 text-lg px-8"
+                    onClick={() => setStep("processing2")}
+                  >
+                    Cancel my flight
+                  </Button>
+                </div>
+              )}
+
+              {step === "processing2" && (
+                <div className="space-y-6">
+                  <p className="text-lg">Processing your cancellation…</p>
+                  <Progress value={progress2} />
+                  <p className="text-sm text-muted-foreground">Almost there.</p>
+                </div>
+              )}
+
+              {step === "confirmed" && generated && (
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                    <CheckCircle2 className="h-6 w-6" />
+                    <h3 className="text-xl font-semibold">We’ve confirmed your cancellation.</h3>
+                  </div>
+
+                  <div className={cn("rounded-lg border p-4 bg-muted/30")}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TicketCheck className="h-5 w-5 text-primary" />
+                        <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+                          Your benefit code
+                        </span>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={onCopy}>
+                        <Copy className="h-4 w-4" /> Copy
+                      </Button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-baseline gap-3">
+                      <span className="text-2xl font-bold tabular-nums">
+                        {generated.code}
+                      </span>
+                      <span className="rounded-full bg-secondary px-3 py-1 text-xs">
+                        ends with {generated.ending}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm">
+                      {generated.ending === "500" && "500: You’ll receive vouchers you can apply to future journeys."}
+                      {generated.ending === "600" && "600: One flight within the first 3 weeks from today."}
+                      {generated.ending === "700" && "700: Monetary compensation will be arranged."}
+                      {generated.ending === "800" && "800: Full refund plus an additional flight on us."}
+                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Save this code now. We don’t store it for you.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <a
+                      href="https://slairlines.netlify.app"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full sm:w-auto"
+                    >
+                      <Button size="lg" className="w-full">Proceed to your account</Button>
+                    </a>
+                    <a href="/benefits" className="w-full sm:w-auto">
+                      <Button size="lg" variant="secondary" className="w-full">
+                        See my benefits
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+    </main>
   );
 }
