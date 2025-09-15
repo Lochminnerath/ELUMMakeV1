@@ -129,4 +129,13 @@
     animation: code-gradient 6s ease infinite, code-sway 8s ease-in-out infinite;
     letter-spacing: 0.04em;
   }
+
+  @keyframes attention-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.45); transform: translateY(0); }
+    50% { box-shadow: 0 0 0 10px rgba(59,130,246,0); transform: translateY(-1px); }
+  }
+  .btn-attention {
+    position: relative;
+    animation: attention-glow 1.6s ease-out 1;
+  }
 }
