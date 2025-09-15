@@ -79,6 +79,33 @@ export default function Index() {
 
   const progress1 = useProgress(2400, step === "processing1");
   const progress2 = useProgress(2200, step === "processing2");
+  const [rebookPulse, setRebookPulse] = useState(false);
+
+  useEffect(() => {
+    let showTimer: number | undefined;
+    let hideTimer: number | undefined;
+
+    function schedule() {
+      const delay = Math.floor(7000 + Math.random() * 9000); // 7–16s
+      showTimer = window.setTimeout(() => {
+        setRebookPulse(true);
+        hideTimer = window.setTimeout(() => {
+          setRebookPulse(false);
+          schedule();
+        }, 2000); // highlight for 2s
+      }, delay);
+    }
+
+    if (step === "confirmed") {
+      schedule();
+    }
+
+    return () => {
+      if (showTimer) clearTimeout(showTimer);
+      if (hideTimer) clearTimeout(hideTimer);
+      setRebookPulse(false);
+    };
+  }, [step]);
 
   useEffect(() => {
     if (step === "processing1") {
@@ -133,7 +160,7 @@ export default function Index() {
                       <Input
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="John"
+                        placeholder="First name"
                         autoComplete="given-name"
                       />
                     </div>
@@ -144,7 +171,7 @@ export default function Index() {
                       <Input
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        placeholder="Doe"
+                        placeholder="Last name"
                         autoComplete="family-name"
                       />
                     </div>
@@ -241,6 +268,14 @@ export default function Index() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3">
+                    <a
+                      href="https://slairlines.netlify.app/flights"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full sm:w-auto"
+                    >
+                      <Button size="lg" className={cn("w-full", rebookPulse && "btn-attention")}>Rebook</Button>
+                    </a>
                     <a
                       href="https://slairlines.netlify.app"
                       target="_blank"
