@@ -165,7 +165,7 @@ export default function Index() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(1200px_600px_at_80%_-10%,rgba(79,163,255,.15),transparent),radial-gradient(800px_400px_at_10%_20%,rgba(157,78,221,.12),transparent)] from-background to-background">
+    <main className="min-h-screen bg-[radial-gradient(1200px_600px_at_80%_-10%,rgba(79,163,255,.15),transparent),radial-gradient(800px_400px_at_90%_20%,rgba(157,78,221,.15),transparent)] from-background to-background">
       <section className="container py-16 md:py-24">
         <div className="mx-auto max-w-3xl">
           <Card className="backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-white/5 border-0 shadow-xl">
