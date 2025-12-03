@@ -364,8 +364,8 @@ export default function Index() {
                         <Copy className="h-4 w-4" /> Copy
                       </Button>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-baseline gap-3">
-                      <span className="animated-code text-3xl font-extrabold tabular-nums">
+                    <div className="mt-3 flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-3">
+                      <span className="animated-code text-lg sm:text-3xl font-extrabold tabular-nums whitespace-nowrap">
                         {generated.code}
                       </span>
                       <span className="rounded-full bg-secondary px-3 py-1 text-xs">
