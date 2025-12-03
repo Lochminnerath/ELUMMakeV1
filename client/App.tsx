@@ -21,7 +21,12 @@ const App = () => (
         <div className="min-h-screen flex flex-col">
           <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
             <div className="container h-14 flex items-center justify-between">
-              <Link to="/" className="font-bold tracking-tight text-lg">
+              <Link to="/" className="font-bold tracking-tight text-lg flex items-center gap-2">
+                <img
+                  src="https://cdn.builder.io/api/v1/image/assets%2Fe66622eddf684604adcf1fff2dfb4c40%2Fff08989566164c079dea1361b6eaee7a?format=webp&width=800"
+                  alt="SL Airlines"
+                  className="h-8 w-8"
+                />
                 SL Airlines
               </Link>
               <nav className="flex items-center gap-6 text-sm text-muted-foreground">
@@ -40,8 +45,16 @@ const App = () => (
             </Routes>
           </div>
           <footer className="border-t bg-background/80">
-            <div className="container py-6 text-xs text-muted-foreground">
-              © {new Date().getFullYear()} SL Airlines. All rights reserved.
+            <div className="container py-6 text-xs text-muted-foreground flex items-center justify-between">
+              <div>© {new Date().getFullYear()} SL Airlines. All rights reserved.</div>
+              <a
+                href="https://sites.google.com/view/sl-airlines/our-policy"
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-foreground transition-colors"
+              >
+                Policies
+              </a>
             </div>
           </footer>
         </div>
