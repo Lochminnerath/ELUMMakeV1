@@ -242,18 +242,18 @@ export default function Index() {
                 <div className="space-y-6">
                   <div>
                     <label className="mb-2 block text-sm font-medium">
-                      Last 4 digits of your card
+                      Last 2 digits of your card
                     </label>
                     <Input
                       inputMode="numeric"
-                      pattern="\\d{4}"
-                      maxLength={4}
-                      placeholder="1234"
+                      pattern="\\d{2}"
+                      maxLength={2}
+                      placeholder="12"
                       value={last4}
                       onChange={(e) => {
                         const v = e.target.value
                           .replace(/[^0-9]/g, "")
-                          .slice(0, 4);
+                          .slice(0, 2);
                         setLast4(v);
                       }}
                     />
@@ -261,7 +261,7 @@ export default function Index() {
                   <div className="flex items-center gap-3">
                     <Button
                       onClick={() => setStep("processingPerks")}
-                      disabled={last4.length !== 4}
+                      disabled={last4.length !== 2}
                     >
                       Verify
                     </Button>
