@@ -81,8 +81,8 @@ export default function Benefits() {
                 <TicketCheck className="h-5 w-5 text-primary" />
                 <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Your code</span>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <span className="animated-code text-3xl font-extrabold tabular-nums select-all">{code}</span>
+              <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <span className="animated-code text-lg sm:text-3xl font-extrabold tabular-nums select-all whitespace-nowrap">{code}</span>
                 <Button variant="ghost" size="sm" onClick={async () => { try { await navigator.clipboard.writeText(code); } catch {} }}>
                   <Copy className="h-4 w-4" /> Copy
                 </Button>
@@ -95,12 +95,12 @@ export default function Benefits() {
             </div>
 
             <p className="text-sm text-muted-foreground">Save this code now. We don’t store it for you.</p>
-            <div className="flex gap-3">
-              <a href="/">
-                <Button variant="secondary">Back home</Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <a href="/" className="flex-1 sm:flex-initial">
+                <Button variant="secondary" className="w-full">Back home</Button>
               </a>
-              <a href="https://slairlines.netlify.app" target="_blank" rel="noreferrer">
-                <Button>Proceed to your account</Button>
+              <a href="https://slairlines.netlify.app" target="_blank" rel="noreferrer" className="flex-1 sm:flex-initial">
+                <Button className="w-full">Account</Button>
               </a>
             </div>
           </CardContent>
