@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, TicketCheck, Copy } from "lucide-react";
 
@@ -73,17 +79,31 @@ export default function Benefits() {
               <CheckCircle2 className="h-6 w-6" />
               <CardTitle>Benefit confirmed</CardTitle>
             </div>
-            <CardDescription>Your personalized benefit from your cancellation.</CardDescription>
+            <CardDescription>
+              Your personalized benefit from your cancellation.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="rounded-lg border p-5 bg-muted/30">
               <div className="flex items-center gap-2">
                 <TicketCheck className="h-5 w-5 text-primary" />
-                <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Your code</span>
+                <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+                  Your code
+                </span>
               </div>
               <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                <span className="animated-code text-lg sm:text-3xl font-extrabold tabular-nums select-all whitespace-nowrap">{code}</span>
-                <Button variant="ghost" size="sm" onClick={async () => { try { await navigator.clipboard.writeText(code); } catch {} }}>
+                <span className="animated-code text-lg sm:text-3xl font-extrabold tabular-nums select-all whitespace-nowrap">
+                  {code}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(code);
+                    } catch {}
+                  }}
+                >
                   <Copy className="h-4 w-4" /> Copy
                 </Button>
               </div>
@@ -94,12 +114,21 @@ export default function Benefits() {
               <p className="text-muted-foreground">{benefit.desc}</p>
             </div>
 
-            <p className="text-sm text-muted-foreground">Save this code now. We don’t store it for you.</p>
+            <p className="text-sm text-muted-foreground">
+              Save this code now. We don’t store it for you.
+            </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <a href="/" className="flex-1 sm:flex-initial">
-                <Button variant="secondary" className="w-full">Back home</Button>
+                <Button variant="secondary" className="w-full">
+                  Back home
+                </Button>
               </a>
-              <a href="https://slairlines.netlify.app" target="_blank" rel="noreferrer" className="flex-1 sm:flex-initial">
+              <a
+                href="https://slairlines.netlify.app"
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 sm:flex-initial"
+              >
                 <Button className="w-full">Account</Button>
               </a>
             </div>
