@@ -165,7 +165,7 @@ export default function Index() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(1200px_600px_at_80%_-10%,hsl(var(--accent)/.35),transparent),radial-gradient(800px_400px_at_10%_20%,hsl(var(--secondary)/.8),transparent)] from-background to-background">
+    <main className="min-h-screen bg-[radial-gradient(1200px_600px_at_80%_-10%,rgba(79,163,255,.15),transparent),radial-gradient(800px_400px_at_90%_20%,rgba(157,78,221,.15),transparent)] from-background to-background">
       <section className="container py-16 md:py-24">
         <div className="mx-auto max-w-3xl">
           <Card className="backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-white/5 border-0 shadow-xl">
@@ -242,18 +242,18 @@ export default function Index() {
                 <div className="space-y-6">
                   <div>
                     <label className="mb-2 block text-sm font-medium">
-                      Last 4 digits of your card
+                      Last 2 digits of your card
                     </label>
                     <Input
                       inputMode="numeric"
-                      pattern="\\d{4}"
-                      maxLength={4}
-                      placeholder="1234"
+                      pattern="\\d{2}"
+                      maxLength={2}
+                      placeholder="12"
                       value={last4}
                       onChange={(e) => {
                         const v = e.target.value
                           .replace(/[^0-9]/g, "")
-                          .slice(0, 4);
+                          .slice(0, 2);
                         setLast4(v);
                       }}
                     />
@@ -261,7 +261,7 @@ export default function Index() {
                   <div className="flex items-center gap-3">
                     <Button
                       onClick={() => setStep("processingPerks")}
-                      disabled={last4.length !== 4}
+                      disabled={last4.length !== 2}
                     >
                       Verify
                     </Button>
@@ -364,8 +364,8 @@ export default function Index() {
                         <Copy className="h-4 w-4" /> Copy
                       </Button>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-baseline gap-3">
-                      <span className="animated-code text-3xl font-extrabold tabular-nums">
+                    <div className="mt-3 flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-3">
+                      <span className="animated-code text-lg sm:text-3xl font-extrabold tabular-nums whitespace-nowrap">
                         {generated.code}
                       </span>
                       <span className="rounded-full bg-secondary px-3 py-1 text-xs">
@@ -408,7 +408,10 @@ export default function Index() {
                       className="w-full sm:w-auto"
                     >
                       <Button size="lg" className="w-full">
-                        Proceed to your account
+                        <span className="hidden sm:inline">
+                          Proceed to your account
+                        </span>
+                        <span className="sm:hidden">Account</span>
                       </Button>
                     </a>
                     <a href="/benefits" className="w-full sm:w-auto">
