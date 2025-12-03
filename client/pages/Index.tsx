@@ -408,7 +408,8 @@ export default function Index() {
                       className="w-full sm:w-auto"
                     >
                       <Button size="lg" className="w-full">
-                        Proceed to your account
+                        <span className="hidden sm:inline">Proceed to your account</span>
+                        <span className="sm:hidden">Account</span>
                       </Button>
                     </a>
                     <a href="/benefits" className="w-full sm:w-auto">
