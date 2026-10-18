@@ -5,7 +5,7 @@
   background: var(--surface);
 }
 
-/* ---- Art panel: the Write mark, drawn large in glass ---- */
+/* ---- Art panel: the Make mark, drawn large in glass ---- */
 .auth__art {
   position: relative;
   overflow: hidden;
@@ -20,68 +20,48 @@
   position: absolute;
   inset: auto -20% -30% -20%;
   height: 70%;
-  background: radial-gradient(closest-side, rgba(245, 154, 82, 0.18), transparent);
+  background: radial-gradient(closest-side, rgba(236, 127, 169, 0.18), transparent);
   pointer-events: none;
 }
-.auth__discs {
-  --d: min(26vw, 300px);
+.auth__mark {
   position: absolute;
-  top: 46%;
+  top: 44%;
   left: 50%;
-  width: calc(var(--d) * 1.87);
-  height: var(--d);
-  translate: -50% -60%;
+  width: min(40vw, 440px);
+  height: auto;
+  translate: -50% -55%;
+  overflow: visible;
+  filter: drop-shadow(0 24px 40px rgba(112, 147, 248, 0.14));
+}
+.auth__glass-hi {
+  stop-color: #ffffff;
+}
+.auth__glass-lo {
+  stop-color: #e9ecf4;
 }
 .auth__disc {
-  position: absolute;
-  top: 0;
-  width: var(--d);
-  height: var(--d);
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffffff, #e9ecf4 80%);
-  border: 2px solid #fbcfa8;
-  box-shadow: 0 24px 60px rgba(112, 147, 248, 0.14);
+  fill: url(#auth-glass);
+  fill-opacity: 0.92;
+  stroke: #f8cadb;
+  stroke-width: 1;
   animation: disc-in var(--dur-hero) var(--ease) both;
 }
-.auth__disc--a {
-  left: 0;
-}
-.auth__disc--b {
-  left: calc(var(--d) * 0.615);
-  opacity: 0.92;
-  animation-delay: 80ms;
+.auth__petal {
+  fill: var(--make);
+  animation: lens-in var(--dur-hero) var(--ease) both;
 }
 [data-theme='dark'] .auth__disc {
-  background: rgba(26, 32, 51, 0.9);
-  border-color: rgba(245, 154, 82, 0.6);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  fill: #1a2033;
+  fill-opacity: 0.9;
+  stroke: rgba(236, 127, 169, 0.6);
 }
-/* The lens: the overlap of the two discs, lit in apricot. */
-.auth__lens {
-  position: absolute;
-  top: 0;
-  left: calc(var(--d) * 0.615);
-  width: var(--d);
-  height: var(--d);
-  border-radius: 50%;
-  background: var(--make);
-  clip-path: circle(50% at calc(50% - var(--d) * 0.615) 50%);
-  animation: lens-in var(--dur-hero) var(--ease) 320ms both;
-}
-.auth__stop {
-  position: absolute;
-  left: calc(var(--d) * 1.6);
-  top: calc(var(--d) * 0.73);
-  width: calc(var(--d) * 0.27);
-  height: calc(var(--d) * 0.27);
-  border-radius: 50%;
-  background: var(--make);
-  animation: lens-in var(--dur-hero) var(--ease) 520ms both;
+[data-theme='dark'] .auth__mark {
+  filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.35));
 }
 @keyframes disc-in {
   from {
     opacity: 0;
-    translate: 0 16px;
+    translate: 0 3px;
   }
 }
 @keyframes lens-in {

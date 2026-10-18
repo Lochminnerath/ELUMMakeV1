@@ -18,6 +18,21 @@ type HandleState = { kind: 'idle' } | { kind: 'checking' } | { kind: 'ok' } | { 
 /** ELUM Type addresses can be made here when the ELUM platform (Supabase) is connected. */
 const typeAccounts = !!api.handleAvailable && !!api.typeDomain;
 
+// The Make mark: four glass discs, lit pink where neighbours overlap.
+const DISCS = [
+  [40, 40],
+  [80, 40],
+  [40, 80],
+  [80, 80],
+] as const;
+// [disc that clips, disc that is drawn]
+const PETALS = [
+  [0, 1],
+  [0, 2],
+  [1, 3],
+  [2, 3],
+] as const;
+
 export function AuthPage({ mode }: { mode: Mode }) {
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
@@ -110,12 +125,33 @@ export function AuthPage({ mode }: { mode: Mode }) {
     <div className="auth">
       <aside className="auth__art" aria-hidden="true">
         <div className="auth__glow" />
-        <div className="auth__discs">
-          <span className="auth__disc auth__disc--a" />
-          <span className="auth__disc auth__disc--b" />
-          <span className="auth__lens" />
-          <span className="auth__stop" />
-        </div>
+        <svg className="auth__mark" viewBox="8 8 104 104">
+          <defs>
+            <radialGradient id="auth-glass" cx="35%" cy="30%" r="80%">
+              <stop offset="0" className="auth__glass-hi" />
+              <stop offset="1" className="auth__glass-lo" />
+            </radialGradient>
+            {DISCS.map(([cx, cy], i) => (
+              <clipPath key={i} id={`auth-disc-${i}`}>
+                <circle cx={cx} cy={cy} r="26" />
+              </clipPath>
+            ))}
+          </defs>
+          {DISCS.map(([cx, cy], i) => (
+            <circle key={i} className="auth__disc" style={{ animationDelay: `${i * 80}ms` }} cx={cx} cy={cy} r="26" />
+          ))}
+          {PETALS.map(([clip, disc], i) => (
+            <circle
+              key={i}
+              className="auth__petal"
+              style={{ animationDelay: `${320 + i * 90}ms` }}
+              cx={DISCS[disc][0]}
+              cy={DISCS[disc][1]}
+              r="26"
+              clipPath={`url(#auth-disc-${clip})`}
+            />
+          ))}
+        </svg>
         <div className="auth__art-copy">
           <p className="label muted">Built by people. Runs without AI.</p>
           <p className="auth__tagline">Design it. Present it. Share it.</p>
