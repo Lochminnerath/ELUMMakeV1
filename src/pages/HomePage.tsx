@@ -99,11 +99,6 @@ export function HomePage() {
           <h1 id="start-heading" className="home__hello">
             What will you make{firstName ? `, ${firstName}` : ''}?
           </h1>
-          {api.mode === 'local' && (
-            <p className="home__preview" role="note">
-              Preview mode: designs and accounts stay in this browser and never reach Supabase. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to use ELUM.
-            </p>
-          )}
           <h2 className="home__label">Start blank</h2>
           <ul className="sizes" role="list">
             {PAGE_SIZES.map((s) => (

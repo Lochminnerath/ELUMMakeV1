@@ -15,15 +15,6 @@
   line-height: 44px;
   letter-spacing: -0.015em;
 }
-.home__preview {
-  margin: 0 0 var(--space-6);
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--make-mist);
-  color: var(--make-deep);
-  font-size: 14px;
-  font-weight: 500;
-}
 .home__label {
   margin: var(--space-6) 0 var(--space-3);
   font-size: 13px;

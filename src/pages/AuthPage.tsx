@@ -334,12 +334,6 @@ export function AuthPage({ mode }: { mode: Mode }) {
           <p className="auth__switch">
             {isSignUp ? 'Already have an account?' : 'New to ELUM?'} <Link to={switchHref}>{isSignUp ? 'Sign in' : 'Create an account'}</Link>
           </p>
-
-          {api.mode === 'local' && (
-            <p className="auth__local muted">
-              Preview mode: accounts and designs stay in this browser and never reach Supabase. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to use real ELUM accounts.
-            </p>
-          )}
         </form>
       </main>
     </div>
