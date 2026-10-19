@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { checkSignUp, cleanName, cleanTitle, handleProblem, isEmail, MIN_PASSWORD } from '../validation';
 import { cookieStorage, usableCookieDomain } from './cookieStorage';
+import { PENDING_ROLE, tokenRole } from '../../security/approvals';
 
 /**
  * ELUM Make on the ELUM platform (Supabase):
@@ -296,6 +297,10 @@ export class SupabaseApi implements MakeApi {
   }
 
   private async sessionFor(session: AuthSession): Promise<Session> {
+    // Waiting for approval from another device (ELUM Account > Security): nothing else answers it.
+    if (tokenRole(session.access_token) === PENDING_ROLE) {
+      throw new ApiError('approval_required', 'Approve this sign-in on a device you are already signed in to.');
+    }
     const profile = await this.profileFor(session.user.id);
     // Tell the platform this account uses Make. Optional: older databases lack the function.
     void this.sb.rpc('elum_join_service', { p_service: 'make' }).then(() => undefined, () => undefined);

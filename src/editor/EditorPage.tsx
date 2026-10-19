@@ -1,25 +1,5 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  Circle,
-  CloudOff,
-  Download,
-  Image as ImageIcon,
-  Layers,
-  Minus,
-  MoveRight,
-  PanelRight,
-  Play,
-  Redo2,
-  Slash,
-  Square,
-  Star,
-  Triangle,
-  Type,
-  Undo2,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Circle, CloudOff, Image as ImageIcon, Layers, Minus, MoveRight, PanelRight, Play, Redo2, Slash, Square, Star, Triangle, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react';
+import { DownloadIcon } from '../components/icons/ElumIcons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, errorMessage, isApiError, type Design, type DesignContent, type DesignElement, type Page } from '../api';
@@ -627,7 +607,7 @@ function Editor({ initial }: { initial: Design }) {
             ]}
             trigger={(props) => (
               <button type="button" className="icon-btn" aria-label="Download" data-tip="Download" disabled={exporting} {...props}>
-                <Download {...ICON} />
+                <DownloadIcon {...ICON} />
               </button>
             )}
           />

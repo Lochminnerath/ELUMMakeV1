@@ -1,4 +1,5 @@
-import { ArrowDown, ArrowUp, Copy, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, MoreHorizontal, Plus } from 'lucide-react';
+import { DeleteIcon, DuplicateIcon } from '../components/icons/ElumIcons';
 import type { Page } from '../api/types';
 import { Menu } from '../components/Menu';
 import { PageView } from './render';
@@ -43,11 +44,11 @@ export function PagesStrip({
                 label={`Page ${i + 1}`}
                 placement="right-start"
                 items={[
-                  { label: 'Duplicate page', icon: <Copy size={16} strokeWidth={1.75} />, onSelect: () => onDuplicate(i) },
+                  { label: 'Duplicate page', icon: <DuplicateIcon size={16} strokeWidth={1.75} />, onSelect: () => onDuplicate(i) },
                   { label: 'Move up', icon: <ArrowUp size={16} strokeWidth={1.75} />, disabled: i === 0, onSelect: () => onMove(i, -1) },
                   { label: 'Move down', icon: <ArrowDown size={16} strokeWidth={1.75} />, disabled: i === pages.length - 1, onSelect: () => onMove(i, 1) },
                   'separator',
-                  { label: 'Delete page', icon: <Trash2 size={16} strokeWidth={1.75} />, danger: true, disabled: pages.length === 1, onSelect: () => onDelete(i) },
+                  { label: 'Delete page', icon: <DeleteIcon size={16} strokeWidth={1.75} />, danger: true, disabled: pages.length === 1, onSelect: () => onDelete(i) },
                 ]}
                 trigger={(props) => (
                   <button type="button" className="icon-btn pages__more" aria-label={`More for page ${i + 1}`} {...props}>

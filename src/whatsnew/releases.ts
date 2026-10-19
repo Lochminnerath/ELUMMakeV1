@@ -35,6 +35,16 @@ export const RELEASES: Release[] = [
     intro: 'A few things that make Make feel more at home, and one fix you will notice on stage.',
     features: [
       {
+        title: 'Approve new sign-ins',
+        text: 'Turn it on in ELUM Account, under Security. Anyone signing in with your password then waits until you pick the matching number on a device you are signed in to.',
+        art: 'check',
+      },
+      {
+        title: 'Every action, its own symbol',
+        text: 'Archive, delete, share, reply, download and more each have their own ELUM symbol and colour, so you can tell them apart at a glance.',
+        art: 'layers',
+      },
+      {
         title: 'Move between apps',
         text: 'Open the ELUM apps window from the dots at the top of the page, and jump to Write, Type, Make or your account in one click.',
         art: 'spark',
@@ -46,7 +56,7 @@ export const RELEASES: Release[] = [
       },
       {
         title: 'A symbol for sharing',
-        text: 'Share now has its own ELUM symbol: two people, and the part you share between them.',
+        text: 'Share now has its own ELUM symbol: three connected people, the one sharing in colour.',
         art: 'share',
       },
       {

@@ -1,4 +1,5 @@
-import { Copy, LogOut, MoreHorizontal, PenLine, Plus, Search, Trash2 } from 'lucide-react';
+import { MoreHorizontal, PenLine, Plus, Search } from 'lucide-react';
+import { DeleteIcon, DuplicateIcon, SignOutIcon } from '../components/icons/ElumIcons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage, type DesignSummary } from '../api';
@@ -189,11 +190,11 @@ export function HomePage() {
                     placement="bottom-end"
                     items={[
                       ...(d.role !== 'viewer' ? [{ label: 'Rename', icon: <PenLine size={16} strokeWidth={1.75} />, onSelect: () => setRenaming(d) }] : []),
-                      { label: 'Make a copy', icon: <Copy size={16} strokeWidth={1.75} />, onSelect: () => void duplicate(d) },
+                      { label: 'Make a copy', icon: <DuplicateIcon size={16} strokeWidth={1.75} />, onSelect: () => void duplicate(d) },
                       'separator',
                       d.role === 'owner'
-                        ? { label: 'Delete', icon: <Trash2 size={16} strokeWidth={1.75} />, danger: true, onSelect: () => setRemoving(d) }
-                        : { label: 'Remove from your designs', icon: <LogOut size={16} strokeWidth={1.75} />, onSelect: () => setRemoving(d) },
+                        ? { label: 'Delete', icon: <DeleteIcon size={16} strokeWidth={1.75} />, danger: true, onSelect: () => setRemoving(d) }
+                        : { label: 'Remove from your designs', icon: <SignOutIcon size={16} strokeWidth={1.75} />, onSelect: () => setRemoving(d) },
                     ]}
                     trigger={(props) => (
                       <button type="button" className="icon-btn design-card__more" aria-label={`More for ${d.title}`} data-tip="More" {...props}>
