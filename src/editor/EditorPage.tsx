@@ -1,4 +1,5 @@
-import { ArrowLeft, ArrowRight, Circle, CloudOff, Image as ImageIcon, Layers, Minus, MoveRight, PanelRight, Play, Redo2, Slash, Square, Star, Triangle, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Circle, Image as ImageIcon, Layers, Minus, MoveRight, PanelRight, Redo2, Slash, Square, Star, Triangle, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react';
+import { OfflineIcon, PresentIcon } from '../components/icons/ElumIcons';
 import { DownloadIcon } from '../components/icons/ElumIcons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -22,6 +23,7 @@ import { ShareDialog } from './ShareDialog';
 import { ShareIcon } from '../components/ShareIcon';
 import './editor.css';
 import { ElumLauncher } from '../components/ElumLauncher';
+import { useFavicon } from '../lib/favicon';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'offline';
 const SAVE_DELAY = 900;
@@ -29,6 +31,7 @@ const ICON = { size: 18, strokeWidth: 1.75 };
 
 export default function EditorPage() {
   const { designId = '' } = useParams();
+  useFavicon('/favicons/design.svg');
   const [design, setDesign] = useState<Design | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -586,7 +589,7 @@ function Editor({ initial }: { initial: Design }) {
         <span className="editor__status" data-state={saveState} aria-live="polite">
           {readOnly ? 'View only' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Edited' : saveState === 'offline' ? (
             <>
-              <CloudOff size={14} strokeWidth={1.75} aria-hidden="true" /> Not saved, retrying
+              <OfflineIcon size={14} strokeWidth={1.75} aria-hidden="true" /> Not saved, retrying
             </>
           ) : 'Saved'}
         </span>
@@ -612,7 +615,7 @@ function Editor({ initial }: { initial: Design }) {
             )}
           />
           <button type="button" className="elum-btn elum-btn--secondary elum-btn--sm editor__present" onClick={() => setPresenting(true)}>
-            <Play size={16} strokeWidth={1.75} /> <span>Present</span>
+            <PresentIcon size={16} strokeWidth={1.75} /> <span>Present</span>
           </button>
           <button type="button" className="elum-btn elum-btn--primary elum-btn--sm" onClick={() => setSharing(true)}>
             <ShareIcon size={17} strokeWidth={1.85} /> <span className="editor__share-label">Share</span>

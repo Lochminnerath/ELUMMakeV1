@@ -1,4 +1,5 @@
-import { MoreHorizontal, PenLine, Plus, Search } from 'lucide-react';
+import { MoreHorizontal, Plus, Search } from 'lucide-react';
+import { RenameIcon } from '../components/icons/ElumIcons';
 import { DeleteIcon, DuplicateIcon, SignOutIcon } from '../components/icons/ElumIcons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -189,7 +190,7 @@ export function HomePage() {
                     label={`More for ${d.title}`}
                     placement="bottom-end"
                     items={[
-                      ...(d.role !== 'viewer' ? [{ label: 'Rename', icon: <PenLine size={16} strokeWidth={1.75} />, onSelect: () => setRenaming(d) }] : []),
+                      ...(d.role !== 'viewer' ? [{ label: 'Rename', icon: <RenameIcon size={16} strokeWidth={1.75} />, onSelect: () => setRenaming(d) }] : []),
                       { label: 'Make a copy', icon: <DuplicateIcon size={16} strokeWidth={1.75} />, onSelect: () => void duplicate(d) },
                       'separator',
                       d.role === 'owner'

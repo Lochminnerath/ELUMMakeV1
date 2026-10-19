@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronUp, Eye, EyeOff, Image, Lock, Minus, Shapes, Type, Unlock } from 'lucide-react';
+import { ChevronDown, ChevronUp, Image, Minus, Shapes, Type } from 'lucide-react';
+import { HiddenIcon, PrivateIcon, UnlockedIcon, VisibleIcon } from '../components/icons/ElumIcons';
 import type { DesignElement, Page } from '../api/types';
 import { labelFor } from './Inspector';
 
@@ -41,10 +42,10 @@ export function LayersPanel({
                 <ChevronDown size={14} strokeWidth={1.75} />
               </button>
               <button type="button" className="icon-btn" aria-label={el.hidden ? 'Show' : 'Hide'} data-tip={el.hidden ? 'Show' : 'Hide'} aria-pressed={!!el.hidden} onClick={() => onToggle(el.id, 'hidden')}>
-                {el.hidden ? <EyeOff size={14} strokeWidth={1.75} /> : <Eye size={14} strokeWidth={1.75} />}
+                {el.hidden ? <HiddenIcon size={14} strokeWidth={1.75} /> : <VisibleIcon size={14} strokeWidth={1.75} />}
               </button>
               <button type="button" className="icon-btn" aria-label={el.locked ? 'Unlock' : 'Lock'} data-tip={el.locked ? 'Unlock' : 'Lock'} aria-pressed={!!el.locked} onClick={() => onToggle(el.id, 'locked')}>
-                {el.locked ? <Lock size={14} strokeWidth={1.75} /> : <Unlock size={14} strokeWidth={1.75} />}
+                {el.locked ? <PrivateIcon size={14} strokeWidth={1.75} /> : <UnlockedIcon size={14} strokeWidth={1.75} />}
               </button>
             </span>
           )}
