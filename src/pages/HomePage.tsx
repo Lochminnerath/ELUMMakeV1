@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, errorMessage, type DesignSummary } from '../api';
 import { useUser } from '../auth/AuthProvider';
-import { MakeLockup, MakeMark } from '../components/Brand';
+import { DesignIcon, MakeLockup } from '../components/Brand';
 import { Dialog } from '../components/Dialog';
 import { Loader } from '../components/Loader';
 import { Menu } from '../components/Menu';
@@ -160,7 +160,7 @@ export function HomePage() {
             </div>
           ) : shown.length === 0 ? (
             <div className="empty-state">
-              <MakeMark size={64} />
+              <DesignIcon size={56} />
               <h2>{query || filter !== 'all' ? 'Nothing here' : 'No designs yet'}</h2>
               <p>{query || filter !== 'all' ? 'Try another search or filter.' : 'Pick a size or a template above to make your first one.'}</p>
             </div>

@@ -11,7 +11,6 @@ import {
   PanelRight,
   Play,
   Redo2,
-  Share2,
   Slash,
   Square,
   Star,
@@ -24,7 +23,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, errorMessage, isApiError, type Design, type DesignContent, type DesignElement, type Page } from '../api';
-import { MakeMark } from '../components/Brand';
+import { DesignIcon } from '../components/Brand';
 import { FullPageLoader } from '../components/Loader';
 import { Menu } from '../components/Menu';
 import { NotificationBell } from '../components/NotificationBell';
@@ -40,6 +39,7 @@ import { bounds, cloneElement, clonePage, newImage, newLine, newPage, newShape, 
 import { PagesStrip } from './PagesStrip';
 import { Present } from './Present';
 import { ShareDialog } from './ShareDialog';
+import { ShareIcon } from '../components/ShareIcon';
 import './editor.css';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'offline';
@@ -67,7 +67,7 @@ export default function EditorPage() {
   if (error) {
     return (
       <div className="empty-state" style={{ minHeight: '100%', justifyContent: 'center' }}>
-        <MakeMark size={72} />
+        <DesignIcon size={64} />
         <h2>We could not open this design</h2>
         <p>{error}</p>
         <Link to="/" className="elum-btn elum-btn--primary">
@@ -591,7 +591,7 @@ function Editor({ initial }: { initial: Design }) {
         <Link to="/" className="icon-btn" aria-label="Your designs" data-tip="Your designs">
           <ArrowLeft {...ICON} />
         </Link>
-        <MakeMark size={28} />
+        <DesignIcon size={26} />
         <input
           className="editor__title"
           aria-label="Design name"
@@ -634,7 +634,7 @@ function Editor({ initial }: { initial: Design }) {
             <Play size={16} strokeWidth={1.75} /> <span>Present</span>
           </button>
           <button type="button" className="elum-btn elum-btn--primary elum-btn--sm" onClick={() => setSharing(true)}>
-            <Share2 size={16} strokeWidth={1.75} /> <span className="editor__share-label">Share</span>
+            <ShareIcon size={17} strokeWidth={1.85} /> <span className="editor__share-label">Share</span>
           </button>
           {!narrow && <NotificationBell />}
           <UserMenu />
