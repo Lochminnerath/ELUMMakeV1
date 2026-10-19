@@ -12,6 +12,8 @@ const clean = (v: string | undefined) => (v?.trim() ? v.trim().replace(/\/+$/, '
 export const ACCOUNT_URL = clean(env.VITE_ELUM_ACCOUNT_URL);
 export const WRITE_URL = clean(env.VITE_ELUM_WRITE_URL) ?? 'https://elumwrite.netlify.app';
 export const TYPE_URL = clean(env.VITE_ELUM_TYPE_URL) ?? 'https://elumtype.netlify.app';
+/** Where ELUM Account lives, for the launcher, even when sign-in does not go through it. */
+export const ACCOUNT_HOME = ACCOUNT_URL ?? 'https://elumaccounts.netlify.app';
 export const MAKE_URL = clean(env.VITE_ELUM_MAKE_URL) ?? 'https://elummake.netlify.app';
 
 /** Where an ELUM app lives, for links that belong to it. */

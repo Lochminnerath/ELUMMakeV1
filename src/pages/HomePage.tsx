@@ -16,6 +16,7 @@ import { TEMPLATES, type Template } from '../editor/templates';
 import { formatWhen } from '../lib/time';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import './HomePage.css';
+import { ElumLauncher } from '../components/ElumLauncher';
 
 type Filter = 'all' | 'mine' | 'shared';
 
@@ -89,6 +90,7 @@ export function HomePage() {
         </Link>
         <div className="app-header__end">
           <ThemeToggle />
+          <ElumLauncher />
           <NotificationBell />
           <UserMenu />
         </div>

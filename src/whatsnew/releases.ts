@@ -35,6 +35,11 @@ export const RELEASES: Release[] = [
     intro: 'A few things that make Make feel more at home, and one fix you will notice on stage.',
     features: [
       {
+        title: 'Move between apps',
+        text: 'Open the ELUM apps window from the dots at the top of the page, and jump to Write, Type, Make or your account in one click.',
+        art: 'spark',
+      },
+      {
         title: 'Present stays on',
         text: 'Presenting now fills the screen and stays there until you press Esc. Arrows, space or a click move through your pages.',
         art: 'layers',

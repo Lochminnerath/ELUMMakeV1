@@ -41,6 +41,7 @@ import { Present } from './Present';
 import { ShareDialog } from './ShareDialog';
 import { ShareIcon } from '../components/ShareIcon';
 import './editor.css';
+import { ElumLauncher } from '../components/ElumLauncher';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'offline';
 const SAVE_DELAY = 900;
@@ -636,6 +637,7 @@ function Editor({ initial }: { initial: Design }) {
           <button type="button" className="elum-btn elum-btn--primary elum-btn--sm" onClick={() => setSharing(true)}>
             <ShareIcon size={17} strokeWidth={1.85} /> <span className="editor__share-label">Share</span>
           </button>
+          {!narrow && <ElumLauncher />}
           {!narrow && <NotificationBell />}
           <UserMenu />
         </div>
