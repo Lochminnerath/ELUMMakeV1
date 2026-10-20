@@ -13,6 +13,7 @@ import { HomePage } from './pages/HomePage';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { WhatsNew } from './whatsnew/WhatsNew';
 import { SecurityLayer } from './security/SecurityLayer';
+import { QuietSignIn } from './components/QuietSignIn';
 
 // The editor is the heaviest part of the app, so it loads on demand.
 const EditorPage = lazy(() => import('./editor/EditorPage'));
@@ -23,6 +24,7 @@ export function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
+            <QuietSignIn />
             <ErrorBoundary>
               <Routes>
                 <Route
