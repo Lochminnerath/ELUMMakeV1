@@ -93,7 +93,7 @@ export const RELEASES: Release[] = [
     id: '2026-10-18',
     date: '18 October 2026',
     title: 'ELUM Make is here',
-    intro: 'Slides, posters and social posts, designed by people and shared across ELUM.',
+    intro: 'Slides, posters and social posts, designed by you and shared across ELUM.',
     features: [
       {
         title: 'Start from any size',

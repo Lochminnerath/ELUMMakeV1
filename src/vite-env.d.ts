@@ -15,6 +15,7 @@ interface ImportMetaEnv {
   readonly VITE_ELUM_TYPE_URL?: string;
   /** Where Make itself is hosted. Defaults to https://elummake.netlify.app. */
   readonly VITE_ELUM_MAKE_URL?: string;
+  readonly VITE_ELUM_BROWSE_URL?: string;
 }
 
 interface ImportMeta {

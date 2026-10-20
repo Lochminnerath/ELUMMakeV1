@@ -153,7 +153,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
           ))}
         </svg>
         <div className="auth__art-copy">
-          <p className="label muted">Built by people. Runs without AI.</p>
+          <p className="label muted">Made by you. Runs without AI.</p>
           <p className="auth__tagline">Design it. Present it. Share it.</p>
         </div>
       </aside>
