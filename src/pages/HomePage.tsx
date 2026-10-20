@@ -1,8 +1,8 @@
 import { MoreHorizontal, Plus, Search } from 'lucide-react';
 import { RenameIcon } from '../components/icons/ElumIcons';
 import { DeleteIcon, DuplicateIcon, SignOutIcon } from '../components/icons/ElumIcons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { api, errorMessage, type DesignSummary } from '../api';
 import { useUser } from '../auth/AuthProvider';
 import { DesignIcon, MakeLockup } from '../components/Brand';
@@ -21,6 +21,20 @@ import './HomePage.css';
 import { ElumLauncher } from '../components/ElumLauncher';
 
 type Filter = 'all' | 'mine' | 'shared';
+
+const STARTED_KEY = 'elum.make.store-clicks';
+
+/** True the first time this tab sees a Store click, so one click makes one design. */
+function firstTime(click: string): boolean {
+  try {
+    const seen: string[] = JSON.parse(sessionStorage.getItem(STARTED_KEY) ?? '[]');
+    if (seen.includes(click)) return false;
+    sessionStorage.setItem(STARTED_KEY, JSON.stringify([...seen, click].slice(-50)));
+  } catch {
+    // Without storage, every visit starts one.
+  }
+  return true;
+}
 
 /** Your designs, and ways to start a new one. */
 export function HomePage() {
@@ -48,11 +62,11 @@ export function HomePage() {
     void load();
   }, [load]);
 
-  const create = async (key: string, input: Parameters<typeof api.createDesign>[0]) => {
+  const create = async (key: string, input: Parameters<typeof api.createDesign>[0], replace = false) => {
     setCreating(key);
     try {
       const design = await api.createDesign(input);
-      navigate(`/m/${design.id}`);
+      navigate(`/m/${design.id}`, { replace });
     } catch (e) {
       toast(errorMessage(e), { tone: 'error' });
       setCreating(null);
@@ -61,7 +75,26 @@ export function HomePage() {
 
   const fromSize = (size: PageSize) =>
     create(size.id, { title: `Untitled ${size.label.split(' (')[0].toLowerCase()}`, kind: size.kind, width: size.width, height: size.height, content: { pages: [newPage()] } });
-  const fromTemplate = (t: Template) => create(t.id, { title: t.name, kind: t.kind, width: t.width, height: t.height, content: t.build() });
+  const fromTemplate = (t: Template, replace = false) => create(t.id, { title: t.name, kind: t.kind, width: t.width, height: t.height, content: t.build() }, replace);
+
+  // ELUM Store's "Use in Make" opens /?template=<id>&from=<click>: start that design straight away.
+  // Each click is started once, even when Back (through sign-in) lands on the same address again.
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('template');
+  const click = params.get('from');
+  const started = useRef(false);
+  useEffect(() => {
+    if (!asked || started.current) return;
+    started.current = true;
+    const t = TEMPLATES.find((x) => x.id === asked);
+    if (!t) toast('That template is not in Make. Pick one below.', { tone: 'error' });
+    if (!t || (click && !firstTime(click))) {
+      setParams({}, { replace: true });
+      return;
+    }
+    void fromTemplate(t, true);
+    // Runs for the address it was opened with, not on every render.
+  }, [asked]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
