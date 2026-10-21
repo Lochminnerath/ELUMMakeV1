@@ -1,9 +1,11 @@
-import { Copy, LogOut, MoreHorizontal, PenLine, Plus, Search, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { MoreHorizontal, Plus, Search } from 'lucide-react';
+import { RenameIcon } from '../components/icons/ElumIcons';
+import { DeleteIcon, DuplicateIcon, SignOutIcon } from '../components/icons/ElumIcons';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { api, errorMessage, type DesignSummary } from '../api';
 import { useUser } from '../auth/AuthProvider';
-import { MakeLockup, MakeMark } from '../components/Brand';
+import { DesignIcon, MakeLockup } from '../components/Brand';
 import { Dialog } from '../components/Dialog';
 import { Loader } from '../components/Loader';
 import { Menu } from '../components/Menu';
@@ -16,8 +18,23 @@ import { TEMPLATES, type Template } from '../editor/templates';
 import { formatWhen } from '../lib/time';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import './HomePage.css';
+import { ElumLauncher } from '../components/ElumLauncher';
 
 type Filter = 'all' | 'mine' | 'shared';
+
+const STARTED_KEY = 'elum.make.store-clicks';
+
+/** True the first time this tab sees a Store click, so one click makes one design. */
+function firstTime(click: string): boolean {
+  try {
+    const seen: string[] = JSON.parse(sessionStorage.getItem(STARTED_KEY) ?? '[]');
+    if (seen.includes(click)) return false;
+    sessionStorage.setItem(STARTED_KEY, JSON.stringify([...seen, click].slice(-50)));
+  } catch {
+    // Without storage, every visit starts one.
+  }
+  return true;
+}
 
 /** Your designs, and ways to start a new one. */
 export function HomePage() {
@@ -45,11 +62,11 @@ export function HomePage() {
     void load();
   }, [load]);
 
-  const create = async (key: string, input: Parameters<typeof api.createDesign>[0]) => {
+  const create = async (key: string, input: Parameters<typeof api.createDesign>[0], replace = false) => {
     setCreating(key);
     try {
       const design = await api.createDesign(input);
-      navigate(`/m/${design.id}`);
+      navigate(`/m/${design.id}`, { replace });
     } catch (e) {
       toast(errorMessage(e), { tone: 'error' });
       setCreating(null);
@@ -58,7 +75,26 @@ export function HomePage() {
 
   const fromSize = (size: PageSize) =>
     create(size.id, { title: `Untitled ${size.label.split(' (')[0].toLowerCase()}`, kind: size.kind, width: size.width, height: size.height, content: { pages: [newPage()] } });
-  const fromTemplate = (t: Template) => create(t.id, { title: t.name, kind: t.kind, width: t.width, height: t.height, content: t.build() });
+  const fromTemplate = (t: Template, replace = false) => create(t.id, { title: t.name, kind: t.kind, width: t.width, height: t.height, content: t.build() }, replace);
+
+  // ELUM Store's "Use in Make" opens /?template=<id>&from=<click>: start that design straight away.
+  // Each click is started once, even when Back (through sign-in) lands on the same address again.
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('template');
+  const click = params.get('from');
+  const started = useRef(false);
+  useEffect(() => {
+    if (!asked || started.current) return;
+    started.current = true;
+    const t = TEMPLATES.find((x) => x.id === asked);
+    if (!t) toast('That template is not in Make. Pick one below.', { tone: 'error' });
+    if (!t || (click && !firstTime(click))) {
+      setParams({}, { replace: true });
+      return;
+    }
+    void fromTemplate(t, true);
+    // Runs for the address it was opened with, not on every render.
+  }, [asked]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -89,6 +125,7 @@ export function HomePage() {
         </Link>
         <div className="app-header__end">
           <ThemeToggle />
+          <ElumLauncher />
           <NotificationBell />
           <UserMenu />
         </div>
@@ -99,11 +136,6 @@ export function HomePage() {
           <h1 id="start-heading" className="home__hello">
             What will you make{firstName ? `, ${firstName}` : ''}?
           </h1>
-          {api.mode === 'local' && (
-            <p className="home__preview" role="note">
-              Preview mode: designs and accounts stay in this browser and never reach Supabase. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to use ELUM.
-            </p>
-          )}
           <h2 className="home__label">Start blank</h2>
           <ul className="sizes" role="list">
             {PAGE_SIZES.map((s) => (
@@ -165,7 +197,7 @@ export function HomePage() {
             </div>
           ) : shown.length === 0 ? (
             <div className="empty-state">
-              <MakeMark size={64} />
+              <DesignIcon size={56} />
               <h2>{query || filter !== 'all' ? 'Nothing here' : 'No designs yet'}</h2>
               <p>{query || filter !== 'all' ? 'Try another search or filter.' : 'Pick a size or a template above to make your first one.'}</p>
             </div>
@@ -191,12 +223,12 @@ export function HomePage() {
                     label={`More for ${d.title}`}
                     placement="bottom-end"
                     items={[
-                      ...(d.role !== 'viewer' ? [{ label: 'Rename', icon: <PenLine size={16} strokeWidth={1.75} />, onSelect: () => setRenaming(d) }] : []),
-                      { label: 'Make a copy', icon: <Copy size={16} strokeWidth={1.75} />, onSelect: () => void duplicate(d) },
+                      ...(d.role !== 'viewer' ? [{ label: 'Rename', icon: <RenameIcon size={16} strokeWidth={1.75} />, onSelect: () => setRenaming(d) }] : []),
+                      { label: 'Make a copy', icon: <DuplicateIcon size={16} strokeWidth={1.75} />, onSelect: () => void duplicate(d) },
                       'separator',
                       d.role === 'owner'
-                        ? { label: 'Delete', icon: <Trash2 size={16} strokeWidth={1.75} />, danger: true, onSelect: () => setRemoving(d) }
-                        : { label: 'Remove from your designs', icon: <LogOut size={16} strokeWidth={1.75} />, onSelect: () => setRemoving(d) },
+                        ? { label: 'Delete', icon: <DeleteIcon size={16} strokeWidth={1.75} />, danger: true, onSelect: () => setRemoving(d) }
+                        : { label: 'Remove from your designs', icon: <SignOutIcon size={16} strokeWidth={1.75} />, onSelect: () => setRemoving(d) },
                     ]}
                     trigger={(props) => (
                       <button type="button" className="icon-btn design-card__more" aria-label={`More for ${d.title}`} data-tip="More" {...props}>

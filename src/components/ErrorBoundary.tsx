@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import { MakeMark } from './Brand';
+import { DesignIcon } from './Brand';
 
 interface State {
   error: Error | null;
@@ -19,7 +19,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     const stale = /dynamically imported module|Importing a module script failed|Loading chunk/i.test(this.state.error.message);
     return (
       <div className="empty-state" style={{ minHeight: '100%', justifyContent: 'center' }}>
-        <MakeMark size={72} />
+        <DesignIcon size={64} />
         <h2>{stale ? 'Make has been updated' : 'Something went wrong'}</h2>
         <p>{stale ? 'Reload to get the latest version. Your saved work is safe.' : 'Reload the page to carry on. Your saved work is safe.'}</p>
         <button type="button" className="elum-btn elum-btn--primary" onClick={() => window.location.reload()}>

@@ -90,6 +90,11 @@ select expect((select count(*) from make.designs where id = (select deck from id
 
 select set_config('request.jwt.claim.sub', :'ada', false);
 set role authenticated;
+-- The app removes the pictures through the Storage API first, as the owner.
+select expect_error($$delete from storage.objects where bucket_id = 'make-images'$$, '42501', 'only the Storage API removes pictures');
+select set_config('storage.allow_delete_query', 'true', false);
+delete from storage.objects where bucket_id = 'make-images' and (storage.foldername(name))[1] = (select deck::text from ids);
+select set_config('storage.allow_delete_query', 'false', false);
 select make_delete(deck) from ids;
 reset role;
 select expect((select count(*) from make.designs where id = (select deck from ids)) = 0, 'the owner deletes it');

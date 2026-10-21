@@ -13,19 +13,25 @@ export function Present({ pages, start, width, height, onClose }: { pages: Page[
   const [notes, setNotes] = useState(false);
   const go = useCallback((by: number) => setIndex((i) => Math.min(pages.length - 1, Math.max(0, i + by))), [pages.length]);
 
+  // The editor passes a new onClose on every render (and going full screen resizes the window,
+  // which re-renders it). Keep the latest in a ref so full screen is entered once, not left and
+  // re-entered on each render, which closed Present straight away.
+  const close = useRef(onClose);
+  close.current = onClose;
+
   useEffect(() => {
     const el = ref.current;
     el?.focus();
     el?.requestFullscreen?.().catch(() => undefined);
     const onFullscreen = () => {
-      if (!document.fullscreenElement) onClose();
+      if (!document.fullscreenElement) close.current();
     };
     document.addEventListener('fullscreenchange', onFullscreen);
     return () => {
       document.removeEventListener('fullscreenchange', onFullscreen);
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     };
-  }, [onClose]);
+  }, []);
 
   const page = pages[index];
   return (

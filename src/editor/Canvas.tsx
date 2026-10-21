@@ -48,6 +48,9 @@ export interface CanvasProps {
 export function Canvas({ page, width, height, zoom, selection, readOnly, editingId, onSelect, onEditText, onPreview, onCommit, onDropFiles }: CanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
+  // The second press of a double-click on a text. The page holds the pointer while dragging, so the
+  // browser's dblclick lands on the page, not the text: it is told apart here instead.
+  const lastPress = useRef<{ id: string; at: number } | null>(null);
   const [guides, setGuides] = useState<Guide[]>([]);
   const [marquee, setMarquee] = useState<Box | null>(null);
   const [dropping, setDropping] = useState(false);
@@ -71,6 +74,14 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
     if (e.button !== 0) return;
     e.stopPropagation();
     if (editingId === el.id) return;
+    const previous = lastPress.current;
+    lastPress.current = { id: el.id, at: e.timeStamp };
+    if (previous?.id === el.id && e.timeStamp - previous.at < 450 && !e.shiftKey && !readOnly && el.type === 'text' && !el.locked) {
+      lastPress.current = null;
+      onSelect([el.id]);
+      onEditText(el.id);
+      return;
+    }
     const ids = e.shiftKey ? (selection.includes(el.id) ? selection.filter((id) => id !== el.id) : [...selection, el.id]) : selection.includes(el.id) ? selection : [el.id];
     onSelect(ids);
     if (readOnly || e.shiftKey) return;

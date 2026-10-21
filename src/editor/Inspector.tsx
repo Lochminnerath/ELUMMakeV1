@@ -1,26 +1,6 @@
-import {
-  AlignCenter,
-  AlignCenterHorizontal,
-  AlignCenterVertical,
-  AlignEndHorizontal,
-  AlignEndVertical,
-  AlignLeft,
-  AlignRight,
-  AlignStartHorizontal,
-  AlignStartVertical,
-  ArrowDownToLine,
-  ArrowUpToLine,
-  Bold,
-  BringToFront,
-  Copy,
-  ImageUp,
-  Italic,
-  Lock,
-  SendToBack,
-  Trash2,
-  Underline,
-  Unlock,
-} from 'lucide-react';
+import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, ArrowDownToLine, ArrowUpToLine, Bold, BringToFront, ImageUp, Italic, SendToBack, Underline } from 'lucide-react';
+import { PrivateIcon, UnlockedIcon } from '../components/icons/ElumIcons';
+import { DeleteIcon, DuplicateIcon } from '../components/icons/ElumIcons';
 import type { ReactNode } from 'react';
 import type { DesignElement, Page, TextElement } from '../api/types';
 import { ColorField } from './ColorField';
@@ -179,10 +159,10 @@ export function Inspector(props: InspectorProps) {
       <Section title={one ? labelFor(one) : `${selected.length} selected`}>
         <div className="inspector__actions">
           <Toggle label="Duplicate (Ctrl+D)" onClick={props.onDuplicate}>
-            <Copy {...ICON} />
+            <DuplicateIcon {...ICON} />
           </Toggle>
           <Toggle label={allLocked ? 'Unlock' : 'Lock'} pressed={allLocked} onClick={() => set({ locked: !allLocked })}>
-            {allLocked ? <Lock {...ICON} /> : <Unlock {...ICON} />}
+            {allLocked ? <PrivateIcon {...ICON} /> : <UnlockedIcon {...ICON} />}
           </Toggle>
           <Toggle label="Bring to front" onClick={() => props.onArrange('front')}>
             <BringToFront {...ICON} />
@@ -197,7 +177,7 @@ export function Inspector(props: InspectorProps) {
             <SendToBack {...ICON} />
           </Toggle>
           <Toggle label="Delete" onClick={props.onDelete}>
-            <Trash2 {...ICON} />
+            <DeleteIcon {...ICON} />
           </Toggle>
         </div>
       </Section>

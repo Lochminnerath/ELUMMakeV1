@@ -72,3 +72,9 @@ sh supabase/tests/run.sh   # database tests (needs Postgres: PGHOST, PGUSER)
    - Optional: `VITE_ELUM_ACCOUNT_URL` once ELUM Account is live.
 3. In Supabase, run the Make migration (see [supabase/README.md](supabase/README.md)) and add
    `https://elummake.netlify.app/**` to Authentication > URL Configuration > Redirect URLs.
+
+## What's new
+
+`src/whatsnew/releases.ts` lists what changed, newest first. When an update ships, add a release at
+the top with a new id: everyone sees it once, the next time they open Make, and can read every
+release again from the account menu (What's new).

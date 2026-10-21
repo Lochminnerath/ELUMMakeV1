@@ -46,6 +46,16 @@ $$;
 grant usage on schema storage to authenticated;
 grant select, insert, delete on storage.objects to authenticated;
 grant execute on function storage.foldername(text) to authenticated;
+-- Like Supabase: rows leave storage.objects only through the Storage API, which sets
+-- storage.allow_delete_query for its own deletes.
+create function storage.protect_delete() returns trigger language plpgsql as $$
+begin
+  if coalesce(current_setting('storage.allow_delete_query', true), 'false') <> 'true' then
+    raise exception 'Direct deletion from storage tables is not allowed. Use the Storage API instead.' using errcode = '42501';
+  end if;
+  return null;
+end $$;
+create trigger protect_objects_delete before delete on storage.objects for each statement execute function storage.protect_delete();
 
 -- Supabase grants these by default; the migration narrows them.
 grant usage on schema public to anon, authenticated;

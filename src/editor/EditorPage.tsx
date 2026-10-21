@@ -1,30 +1,10 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  Circle,
-  CloudOff,
-  Download,
-  Image as ImageIcon,
-  Layers,
-  Minus,
-  MoveRight,
-  PanelRight,
-  Play,
-  Redo2,
-  Share2,
-  Slash,
-  Square,
-  Star,
-  Triangle,
-  Type,
-  Undo2,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Circle, Image as ImageIcon, Layers, Minus, MoveRight, PanelRight, Redo2, Slash, Square, Star, Triangle, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react';
+import { OfflineIcon, PresentIcon } from '../components/icons/ElumIcons';
+import { DownloadIcon } from '../components/icons/ElumIcons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, errorMessage, isApiError, type Design, type DesignContent, type DesignElement, type Page } from '../api';
-import { MakeMark } from '../components/Brand';
+import { DesignIcon } from '../components/Brand';
 import { FullPageLoader } from '../components/Loader';
 import { Menu } from '../components/Menu';
 import { NotificationBell } from '../components/NotificationBell';
@@ -40,7 +20,10 @@ import { bounds, cloneElement, clonePage, newImage, newLine, newPage, newShape, 
 import { PagesStrip } from './PagesStrip';
 import { Present } from './Present';
 import { ShareDialog } from './ShareDialog';
+import { ShareIcon } from '../components/ShareIcon';
 import './editor.css';
+import { ElumLauncher } from '../components/ElumLauncher';
+import { useFavicon } from '../lib/favicon';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'offline';
 const SAVE_DELAY = 900;
@@ -48,6 +31,7 @@ const ICON = { size: 18, strokeWidth: 1.75 };
 
 export default function EditorPage() {
   const { designId = '' } = useParams();
+  useFavicon('/favicons/design.svg');
   const [design, setDesign] = useState<Design | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +51,7 @@ export default function EditorPage() {
   if (error) {
     return (
       <div className="empty-state" style={{ minHeight: '100%', justifyContent: 'center' }}>
-        <MakeMark size={72} />
+        <DesignIcon size={64} />
         <h2>We could not open this design</h2>
         <p>{error}</p>
         <Link to="/" className="elum-btn elum-btn--primary">
@@ -591,7 +575,7 @@ function Editor({ initial }: { initial: Design }) {
         <Link to="/" className="icon-btn" aria-label="Your designs" data-tip="Your designs">
           <ArrowLeft {...ICON} />
         </Link>
-        <MakeMark size={28} />
+        <DesignIcon size={26} />
         <input
           className="editor__title"
           aria-label="Design name"
@@ -605,7 +589,7 @@ function Editor({ initial }: { initial: Design }) {
         <span className="editor__status" data-state={saveState} aria-live="polite">
           {readOnly ? 'View only' : saveState === 'saving' ? 'Saving…' : saveState === 'unsaved' ? 'Edited' : saveState === 'offline' ? (
             <>
-              <CloudOff size={14} strokeWidth={1.75} aria-hidden="true" /> Not saved, retrying
+              <OfflineIcon size={14} strokeWidth={1.75} aria-hidden="true" /> Not saved, retrying
             </>
           ) : 'Saved'}
         </span>
@@ -626,16 +610,17 @@ function Editor({ initial }: { initial: Design }) {
             ]}
             trigger={(props) => (
               <button type="button" className="icon-btn" aria-label="Download" data-tip="Download" disabled={exporting} {...props}>
-                <Download {...ICON} />
+                <DownloadIcon {...ICON} />
               </button>
             )}
           />
           <button type="button" className="elum-btn elum-btn--secondary elum-btn--sm editor__present" onClick={() => setPresenting(true)}>
-            <Play size={16} strokeWidth={1.75} /> <span>Present</span>
+            <PresentIcon size={16} strokeWidth={1.75} /> <span>Present</span>
           </button>
           <button type="button" className="elum-btn elum-btn--primary elum-btn--sm" onClick={() => setSharing(true)}>
-            <Share2 size={16} strokeWidth={1.75} /> <span className="editor__share-label">Share</span>
+            <ShareIcon size={17} strokeWidth={1.85} /> <span className="editor__share-label">Share</span>
           </button>
+          {!narrow && <ElumLauncher />}
           {!narrow && <NotificationBell />}
           <UserMenu />
         </div>

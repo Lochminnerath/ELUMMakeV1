@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { checkSignUp, cleanName, cleanTitle, handleProblem, isEmail, MIN_PASSWORD } from '../validation';
 import { cookieStorage, usableCookieDomain } from './cookieStorage';
+import { PENDING_ROLE, tokenRole } from '../../security/approvals';
 
 /**
  * ELUM Make on the ELUM platform (Supabase):
@@ -296,6 +297,10 @@ export class SupabaseApi implements MakeApi {
   }
 
   private async sessionFor(session: AuthSession): Promise<Session> {
+    // Waiting for approval from another device (ELUM Account > Security): nothing else answers it.
+    if (tokenRole(session.access_token) === PENDING_ROLE) {
+      throw new ApiError('approval_required', 'Approve this sign-in on a device you are already signed in to.');
+    }
     const profile = await this.profileFor(session.user.id);
     // Tell the platform this account uses Make. Optional: older databases lack the function.
     void this.sb.rpc('elum_join_service', { p_service: 'make' }).then(() => undefined, () => undefined);
@@ -436,7 +441,23 @@ export class SupabaseApi implements MakeApi {
   }
 
   async deleteDesign(id: string): Promise<void> {
+    // Supabase only lets pictures leave storage through the Storage API, so an owner removes
+    // them here first; make_delete then deletes the design. Someone the design was shared with
+    // only leaves it, and its pictures stay.
+    const design = await this.rpc<Design>('make_get', { p_id: id });
+    if (design.role === 'owner') await this.removePictures(id);
     await this.rpc('make_delete', { p_id: id });
+  }
+
+  /** Every picture in a design's folder. A picture that will not go is left, never the design. */
+  private async removePictures(designId: string): Promise<void> {
+    const bucket = this.sb.storage.from(BUCKET);
+    for (;;) {
+      const { data, error } = await bucket.list(designId, { limit: 100 });
+      if (error || !data?.length) return;
+      const { error: removeError } = await bucket.remove(data.map((f) => `${designId}/${f.name}`));
+      if (removeError || data.length < 100) return;
+    }
   }
 
   // ----------------------------------------------------------------- sharing

@@ -1,3 +1,4 @@
+import { DesignIcon } from '../components/Brand';
 import { Link2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, errorMessage, type PublicUser, type Role, type Share, type ShareRole } from '../api';
@@ -81,6 +82,7 @@ export function ShareDialog({ open, onClose, designId, title, role, owner }: { o
       open={open}
       onClose={onClose}
       title={`Share “${title}”`}
+      icon={<DesignIcon size={26} />}
       description="People you add get a notification in every ELUM app, and the design appears in their Make."
       width={520}
       footer={

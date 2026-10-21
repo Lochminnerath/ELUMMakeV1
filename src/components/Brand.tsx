@@ -28,3 +28,16 @@ export function ElumLockup({ height = 20 }: { height?: number }) {
     </span>
   );
 }
+
+/** The symbol for a single Make design: a slide on its stack, with the Make mark on it. */
+export function DesignIcon({ size = 24, label }: { size?: number; label?: string }) {
+  // The symbol's viewBox is 60 x 48; size is its height.
+  const width = Math.round((size * 60) / 48);
+  const alt = label ?? '';
+  return (
+    <span className="design-icon" style={{ height: size, width }} aria-hidden={label ? undefined : true}>
+      <img className="theme-light-only" src="/brand/make/elum-make-design.svg" width={width} height={size} alt={alt} />
+      <img className="theme-dark-only" src="/brand/make/elum-make-design-reversed.svg" width={width} height={size} alt={alt} />
+    </span>
+  );
+}
