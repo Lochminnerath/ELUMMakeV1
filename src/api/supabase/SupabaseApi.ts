@@ -3,6 +3,12 @@ import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_BYTES, type MakeApi, type Notifications
 import { ApiError } from '../errors';
 import type {
   AppNotification,
+  BrandKit,
+  BrandKitAsset,
+  Comment,
+  DesignTemplate,
+  DesignVersion,
+  Favorite,
   Design,
   DesignContent,
   DesignSummary,
@@ -426,6 +432,84 @@ export class SupabaseApi implements MakeApi {
 
   async saveDesign(id: string, version: number, content: DesignContent, title?: string): Promise<SaveResult> {
     return this.rpc<SaveResult>('make_save', { p_id: id, p_version: version, p_content: content, p_title: title ?? null }, 'Your changes could not be saved. They are kept here; trying again.');
+  }
+
+  async versionHistory(designId: string): Promise<DesignVersion[]> {
+    return (await this.rpc<DesignVersion[]>('make_versions', { p_id: designId })) ?? [];
+  }
+
+  async restoreVersion(designId: string, version: number): Promise<SaveResult> {
+    return this.rpc<SaveResult>('make_restore_version', { p_id: designId, p_version: version });
+  }
+
+  async comments(designId: string): Promise<Comment[]> {
+    return (await this.rpc<Comment[]>('make_comments', { p_id: designId })) ?? [];
+  }
+
+  async addComment(designId: string, body: string, parentId?: string, position?: { page: number; x: number; y: number }): Promise<Comment> {
+    return this.rpc<Comment>('make_add_comment', {
+      p_id: designId,
+      p_body: body,
+      p_parent: parentId ?? null,
+      p_page: position?.page ?? null,
+      p_x: position?.x ?? null,
+      p_y: position?.y ?? null,
+    });
+  }
+
+  async resolveComment(commentId: string, resolved: boolean): Promise<void> {
+    await this.rpc('make_resolve_comment', { p_comment: commentId, p_resolved: resolved });
+  }
+
+  async brandKits(): Promise<BrandKit[]> {
+    return (await this.rpc<BrandKit[]>('make_brand_kits')) ?? [];
+  }
+
+  async getBrandKit(id: string): Promise<BrandKit> {
+    return this.rpc<BrandKit>('make_brand_kit', { p_kit: id });
+  }
+
+  async saveBrandKit(id: string | null, name: string, description: string, assets: { colors: BrandKitAsset[]; fonts: BrandKitAsset[]; logo?: string }): Promise<BrandKit> {
+    return this.rpc<BrandKit>('make_save_brand_kit', {
+      p_kit: id,
+      p_name: name,
+      p_description: description || null,
+      p_colors: assets.colors,
+      p_fonts: assets.fonts,
+      p_logo: assets.logo ?? null,
+    });
+  }
+
+  async templates(category?: string): Promise<DesignTemplate[]> {
+    return (await this.rpc<DesignTemplate[]>('make_templates', { p_category: category ?? null })) ?? [];
+  }
+
+  async saveAsTemplate(designId: string, title: string, description?: string, category?: string): Promise<DesignTemplate> {
+    return this.rpc<DesignTemplate>('make_save_as_template', { p_id: designId, p_title: title, p_description: description ?? null, p_category: category ?? null });
+  }
+
+  async createFromTemplate(templateId: string): Promise<DesignSummary> {
+    return this.rpc<DesignSummary>('make_create_from_template', { p_template: templateId });
+  }
+
+  async setTags(designId: string, tags: string[]): Promise<void> {
+    await this.rpc('make_set_tags', { p_id: designId, p_tags: tags });
+  }
+
+  async tagSearch(tags: string[], kind?: string): Promise<DesignSummary[]> {
+    return (await this.rpc<DesignSummary[]>('make_tag_search', { p_tags: tags, p_kind: kind ?? null })) ?? [];
+  }
+
+  async incrementViews(designId: string): Promise<void> {
+    await this.rpc('make_view', { p_id: designId });
+  }
+
+  async favorites(): Promise<Favorite[]> {
+    return (await this.rpc<Favorite[]>('make_favorites')) ?? [];
+  }
+
+  async toggleFavorite(designId: string, favorited: boolean): Promise<void> {
+    await this.rpc('make_favorite', { p_id: designId, p_on: favorited });
   }
 
   async renameDesign(id: string, title: string): Promise<void> {

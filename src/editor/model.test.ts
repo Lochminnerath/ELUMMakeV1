@@ -90,7 +90,19 @@ describe('templates', () => {
       expect(new Set(ids).size).toBe(ids.length);
       expect(a.pages[0].id).not.toBe(b.pages[0].id);
       expect(t.id).not.toMatch(/^slides|^a4|^square/);
+      // Nothing hangs off the page edge.
+      for (const el of a.pages.flatMap((p) => p.elements)) {
+        expect(el.x).toBeGreaterThanOrEqual(0);
+        expect(el.x + el.w).toBeLessThanOrEqual(t.width + 1);
+      }
     }
+  });
+
+  it('keeps the ids Store links to, and has no duplicates', () => {
+    const ids = TEMPLATES.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(expect.arrayContaining(['pitch', 'lesson', 'event-poster', 'quote-post']));
+    expect(ids.length).toBe(20);
   });
 });
 

@@ -1,5 +1,11 @@
 import type {
   AppNotification,
+  BrandKit,
+  BrandKitAsset,
+  Comment,
+  DesignTemplate,
+  DesignVersion,
+  Favorite,
   Design,
   DesignContent,
   DesignSummary,
@@ -67,6 +73,34 @@ export interface MakeApi {
   uploadImage(designId: string, file: File): Promise<string>;
   /** Turns an element's `src` into a URL the browser can load. */
   imageUrl(src: string): Promise<string>;
+
+  // Version history. A snapshot is kept at most every 2 minutes, the newest 50.
+  versionHistory(designId: string): Promise<DesignVersion[]>;
+  /** Puts an earlier version back; what it replaces stays in the history. */
+  restoreVersion(designId: string, version: number): Promise<SaveResult>;
+
+  // Comments. With a position they are pins on a page. Viewers can comment too.
+  comments(designId: string): Promise<Comment[]>;
+  addComment(designId: string, body: string, parentId?: string, position?: { page: number; x: number; y: number }): Promise<Comment>;
+  resolveComment(commentId: string, resolved: boolean): Promise<void>;
+
+  // Brand kits: your colours, fonts and logo.
+  brandKits(): Promise<BrandKit[]>;
+  getBrandKit(id: string): Promise<BrandKit>;
+  /** Creates a kit when `id` is null. */
+  saveBrandKit(id: string | null, name: string, description: string, assets: { colors: BrandKitAsset[]; fonts: BrandKitAsset[]; logo?: string }): Promise<BrandKit>;
+
+  // Your own templates (Make's built-in ones are in editor/templates.ts).
+  templates(category?: string): Promise<DesignTemplate[]>;
+  saveAsTemplate(designId: string, title: string, description?: string, category?: string): Promise<DesignTemplate>;
+  createFromTemplate(templateId: string): Promise<DesignSummary>;
+
+  // Tags, views and favourites
+  setTags(designId: string, tags: string[]): Promise<void>;
+  tagSearch(tags: string[], kind?: string): Promise<DesignSummary[]>;
+  incrementViews(designId: string): Promise<void>;
+  favorites(): Promise<Favorite[]>;
+  toggleFavorite(designId: string, favorited: boolean): Promise<void>;
 }
 
 export interface NotificationsApi {

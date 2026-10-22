@@ -141,6 +141,8 @@ export interface DesignSummary {
   pageCount: number;
   /** The first page, for thumbnails. */
   cover: Page | null;
+  /** Only filled in by tag search. */
+  tags?: string[];
 }
 
 export interface Design extends DesignSummary {
@@ -181,4 +183,85 @@ export interface AppNotification {
   createdAt: string;
   readAt: string | null;
   actor: Pick<PublicUser, 'id' | 'name' | 'color'> | null;
+}
+
+// ------------------------------------------------------------ enhanced features
+
+/** Brand kit asset (color or font). */
+export interface BrandKitAsset {
+  id?: string;
+  value: string;
+  label?: string;
+}
+
+/** A brand kit containing colors, fonts, and optional logo. */
+export interface BrandKit {
+  id: string;
+  name: string;
+  description: string | null;
+  assets: {
+    colors: BrandKitAsset[];
+    fonts: BrandKitAsset[];
+    logo?: string;
+  };
+  isPublic: boolean;
+  updatedAt: string;
+  owner: PublicUser | null;
+}
+
+/** A comment on a design. */
+export interface Comment {
+  id: string;
+  body: string;
+  position: { page: number; x: number; y: number } | null;
+  resolved: boolean;
+  user: PublicUser;
+  createdAt: string;
+  updatedAt: string;
+  replies: Comment[];
+}
+
+/** An annotation on a design page. */
+export interface Annotation {
+  id: string;
+  pageNumber: number;
+  x: number;
+  y: number;
+  body: string;
+  resolved: boolean;
+  user: PublicUser;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A design version for history/restore. */
+export interface DesignVersion {
+  version: number;
+  title: string;
+  savedBy: PublicUser | null;
+  savedAt: string;
+  /** The first page as it was, for a thumbnail. */
+  preview: Page | null;
+}
+
+/** A saved design template. */
+export interface DesignTemplate {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  kind: DesignKind;
+  width: number;
+  height: number;
+  thumbnail: string | null;
+  isPublic: boolean;
+  updatedAt: string;
+  owner: PublicUser | null;
+}
+
+/** A favorite design. */
+export interface Favorite {
+  id: string;
+  designId: string;
+  createdAt: string;
 }

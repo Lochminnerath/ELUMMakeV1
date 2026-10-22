@@ -1,7 +1,12 @@
 import { ACCEPTED_IMAGE_TYPES, type MakeApi } from '../client';
 import { ApiError } from '../errors';
 import type {
+  BrandKit,
+  Comment,
   Design,
+  DesignTemplate,
+  DesignVersion,
+  Favorite,
   DesignContent,
   DesignSummary,
   NewDesignInput,
@@ -47,12 +52,65 @@ interface StoredDesign {
   updatedAt: string;
   updatedBy: string | null;
   shares: { userId: string; role: ShareRole }[];
+  tags?: string[];
+  views?: number;
+}
+
+interface StoredVersion {
+  designId: string;
+  version: number;
+  title: string;
+  content: DesignContent;
+  savedBy: string | null;
+  savedAt: string;
+}
+
+interface StoredComment {
+  id: string;
+  designId: string;
+  authorId: string;
+  parentId: string | null;
+  body: string;
+  position: { page: number; x: number; y: number } | null;
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface StoredKit {
+  id: string;
+  ownerId: string;
+  name: string;
+  description: string | null;
+  assets: BrandKit['assets'];
+  updatedAt: string;
+}
+
+interface StoredTemplate {
+  id: string;
+  ownerId: string;
+  title: string;
+  description: string | null;
+  category: string;
+  kind: Design['kind'];
+  width: number;
+  height: number;
+  content: DesignContent;
+  updatedAt: string;
 }
 
 interface Store {
   users: StoredUser[];
   designs: StoredDesign[];
+  // Added later, so older browsers may not have them yet.
+  versions?: StoredVersion[];
+  comments?: StoredComment[];
+  kits?: StoredKit[];
+  templates?: StoredTemplate[];
+  favorites?: { accountId: string; designId: string; createdAt: string }[];
 }
+
+const SNAPSHOT_MS = 2 * 60 * 1000;
 
 export class LocalApi implements MakeApi {
   readonly mode = 'local' as const;
@@ -221,6 +279,7 @@ export class LocalApi implements MakeApi {
     const { store, design } = this.find(id, 'editor');
     if (design.version !== version) throw new ApiError('conflict', 'Someone else changed this design. Your view was updated.', { version: design.version });
     if (!Array.isArray(content?.pages)) throw new ApiError('invalid', 'That design could not be read.');
+    this.keepVersion(store, design);
     design.content = content;
     if (title?.trim()) design.title = cleanTitle(title);
     design.version += 1;
@@ -228,6 +287,214 @@ export class LocalApi implements MakeApi {
     design.updatedBy = this.me().id;
     this.write(store);
     return { version: design.version, updatedAt: design.updatedAt };
+  }
+
+  // ----------------------------------------------------------------- history
+
+  /** Keeps the design as it is now, at most every 2 minutes and the newest 50. */
+  private keepVersion(store: Store, design: StoredDesign, force = false) {
+    const versions = (store.versions ??= []);
+    const mine = versions.filter((v) => v.designId === design.id);
+    if (!force && mine.some((v) => Date.now() - Date.parse(v.savedAt) < SNAPSHOT_MS)) return;
+    if (mine.some((v) => v.version === design.version)) return;
+    versions.push({ designId: design.id, version: design.version, title: design.title, content: design.content, savedBy: design.updatedBy, savedAt: new Date().toISOString() });
+    const keep = new Set(mine.map((v) => v.version).concat(design.version).sort((a, b) => b - a).slice(0, 50));
+    store.versions = versions.filter((v) => v.designId !== design.id || keep.has(v.version));
+  }
+
+  async versionHistory(designId: string): Promise<DesignVersion[]> {
+    const { store } = this.find(designId);
+    return (store.versions ?? [])
+      .filter((v) => v.designId === designId)
+      .sort((a, b) => b.version - a.version)
+      .map((v) => {
+        const by = store.users.find((u) => u.id === v.savedBy);
+        return { version: v.version, title: v.title, savedBy: by ? person(by) : null, savedAt: v.savedAt, preview: v.content.pages[0] ?? null };
+      });
+  }
+
+  async restoreVersion(designId: string, version: number): Promise<SaveResult> {
+    const { store, design } = this.find(designId, 'editor');
+    const old = store.versions?.find((v) => v.designId === designId && v.version === version);
+    if (!old) throw new ApiError('not_found', 'That version is no longer kept.');
+    this.keepVersion(store, design, true);
+    design.content = old.content;
+    design.title = old.title;
+    design.version += 1;
+    design.updatedAt = new Date().toISOString();
+    design.updatedBy = this.me().id;
+    this.write(store);
+    return { version: design.version, updatedAt: design.updatedAt };
+  }
+
+  // ---------------------------------------------------------------- comments
+
+  private commentJson(store: Store, c: StoredComment): Comment {
+    const author = store.users.find((u) => u.id === c.authorId)!;
+    const replies = (store.comments ?? []).filter((r) => r.parentId === c.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return { id: c.id, body: c.body, position: c.position, resolved: c.resolved, user: person(author), createdAt: c.createdAt, updatedAt: c.updatedAt, replies: replies.map((r) => this.commentJson(store, r)) };
+  }
+
+  async comments(designId: string): Promise<Comment[]> {
+    const { store } = this.find(designId);
+    return (store.comments ?? [])
+      .filter((c) => c.designId === designId && !c.parentId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((c) => this.commentJson(store, c));
+  }
+
+  async addComment(designId: string, body: string, parentId?: string, position?: { page: number; x: number; y: number }): Promise<Comment> {
+    const { store } = this.find(designId);
+    const text = body.trim();
+    if (!text || text.length > 4000) throw new ApiError('invalid', 'Write a comment of up to 4000 characters.');
+    if (parentId && !store.comments?.some((c) => c.id === parentId && c.designId === designId)) throw new ApiError('not_found', 'That comment is no longer there.');
+    const now = new Date().toISOString();
+    const comment: StoredComment = { id: crypto.randomUUID(), designId, authorId: this.me().id, parentId: parentId ?? null, body: text, position: position ?? null, resolved: false, createdAt: now, updatedAt: now };
+    (store.comments ??= []).push(comment);
+    this.write(store);
+    return this.commentJson(store, comment);
+  }
+
+  async resolveComment(commentId: string, resolved: boolean): Promise<void> {
+    const comment = this.read().comments?.find((c) => c.id === commentId);
+    if (!comment) throw new ApiError('not_found', 'That comment is no longer there.');
+    const { store } = this.find(comment.designId, comment.authorId === this.me().id ? 'viewer' : 'editor');
+    const stored = store.comments!.find((c) => c.id === commentId)!;
+    stored.resolved = resolved;
+    stored.updatedAt = new Date().toISOString();
+    this.write(store);
+  }
+
+  // -------------------------------------------------------------- brand kits
+
+  private kitJson(store: Store, k: StoredKit): BrandKit {
+    const owner = store.users.find((u) => u.id === k.ownerId);
+    return { id: k.id, name: k.name, description: k.description, assets: k.assets, isPublic: false, updatedAt: k.updatedAt, owner: owner ? person(owner) : null };
+  }
+
+  async brandKits(): Promise<BrandKit[]> {
+    const me = this.me().id;
+    const store = this.read();
+    return (store.kits ?? [])
+      .filter((k) => k.ownerId === me)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((k) => this.kitJson(store, k));
+  }
+
+  async getBrandKit(id: string): Promise<BrandKit> {
+    const me = this.me().id;
+    const store = this.read();
+    const kit = store.kits?.find((k) => k.id === id && k.ownerId === me);
+    if (!kit) throw new ApiError('not_found', 'That brand kit is not in your account.');
+    return this.kitJson(store, kit);
+  }
+
+  async saveBrandKit(id: string | null, name: string, description: string, assets: BrandKit['assets']): Promise<BrandKit> {
+    const me = this.me().id;
+    const store = this.read();
+    if (!name.trim()) throw new ApiError('invalid', 'Give the brand kit a name, and keep the description short.');
+    const kits = (store.kits ??= []);
+    let kit: StoredKit | undefined;
+    if (id) {
+      kit = kits.find((k) => k.id === id && k.ownerId === me);
+      if (!kit) throw new ApiError('not_found', 'That brand kit is not in your account.');
+    } else {
+      if (kits.filter((k) => k.ownerId === me).length >= 20) throw new ApiError('conflict', 'You have 20 brand kits already. Delete one first.');
+      kit = { id: crypto.randomUUID(), ownerId: me, name: '', description: null, assets: { colors: [], fonts: [] }, updatedAt: '' };
+      kits.push(kit);
+    }
+    Object.assign(kit, { name: name.trim(), description: description || null, assets, updatedAt: new Date().toISOString() });
+    this.write(store);
+    return this.kitJson(store, kit);
+  }
+
+  // --------------------------------------------------------------- templates
+
+  private templateJson(store: Store, t: StoredTemplate): DesignTemplate {
+    const owner = store.users.find((u) => u.id === t.ownerId);
+    return { id: t.id, title: t.title, description: t.description, category: t.category, kind: t.kind, width: t.width, height: t.height, thumbnail: null, isPublic: false, updatedAt: t.updatedAt, owner: owner ? person(owner) : null };
+  }
+
+  async templates(category?: string): Promise<DesignTemplate[]> {
+    const me = this.me().id;
+    const store = this.read();
+    return (store.templates ?? [])
+      .filter((t) => t.ownerId === me && (!category || t.category === category))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((t) => this.templateJson(store, t));
+  }
+
+  async saveAsTemplate(designId: string, title: string, description?: string, category?: string): Promise<DesignTemplate> {
+    const { store, design } = this.find(designId);
+    if (!title.trim()) throw new ApiError('invalid', 'Give the template a name.');
+    const template: StoredTemplate = {
+      id: crypto.randomUUID(),
+      ownerId: this.me().id,
+      title: title.trim(),
+      description: description ?? null,
+      category: category?.trim() || 'mine',
+      kind: design.kind,
+      width: design.width,
+      height: design.height,
+      content: design.content,
+      updatedAt: new Date().toISOString(),
+    };
+    (store.templates ??= []).push(template);
+    this.write(store);
+    return this.templateJson(store, template);
+  }
+
+  async createFromTemplate(templateId: string): Promise<DesignSummary> {
+    const me = this.me().id;
+    const template = this.read().templates?.find((t) => t.id === templateId && t.ownerId === me);
+    if (!template) throw new ApiError('not_found', 'That template is not in your account.');
+    return this.createDesign({ title: template.title, kind: template.kind, width: template.width, height: template.height, content: structuredClone(template.content) });
+  }
+
+  // --------------------------------------------------- tags, views, favourites
+
+  async setTags(designId: string, tags: string[]): Promise<void> {
+    const { store, design } = this.find(designId, 'editor');
+    const clean = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter((t) => t && t.length <= 40))].sort();
+    if (clean.length > 20) throw new ApiError('invalid', 'A design can have up to 20 tags.');
+    design.tags = clean;
+    this.write(store);
+  }
+
+  async tagSearch(tags: string[], kind?: string): Promise<DesignSummary[]> {
+    const me = this.me().id;
+    const want = tags.map((t) => t.trim().toLowerCase());
+    const store = this.read();
+    return store.designs
+      .filter((d) => (d.tags ?? []).some((t) => want.includes(t)) && (!kind || d.kind === kind))
+      .map((d) => ({ d, role: this.roleOf(d, me) }))
+      .filter((x): x is { d: StoredDesign; role: Role } => x.role !== null)
+      .sort((a, b) => b.d.updatedAt.localeCompare(a.d.updatedAt))
+      .map(({ d, role }) => ({ ...this.summary(store, d, role), tags: d.tags ?? [] }));
+  }
+
+  async incrementViews(designId: string): Promise<void> {
+    const { store, design } = this.find(designId);
+    design.views = (design.views ?? 0) + 1;
+    this.write(store);
+  }
+
+  async favorites(): Promise<Favorite[]> {
+    const me = this.me().id;
+    const store = this.read();
+    return (store.favorites ?? [])
+      .filter((f) => f.accountId === me && store.designs.some((d) => d.id === f.designId && this.roleOf(d, me)))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((f) => ({ id: f.designId, designId: f.designId, createdAt: f.createdAt }));
+  }
+
+  async toggleFavorite(designId: string, favorited: boolean): Promise<void> {
+    const { store } = this.find(designId);
+    const me = this.me().id;
+    const list = (store.favorites ??= []).filter((f) => !(f.accountId === me && f.designId === designId));
+    if (favorited) list.push({ accountId: me, designId, createdAt: new Date().toISOString() });
+    store.favorites = list;
+    this.write(store);
   }
 
   async renameDesign(id: string, title: string): Promise<void> {

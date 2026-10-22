@@ -43,6 +43,7 @@ export function HomePage() {
   const toast = useToast();
   const [designs, setDesigns] = useState<DesignSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [allTemplates, setAllTemplates] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState<string | null>(null);
@@ -156,13 +157,16 @@ export function HomePage() {
           </ul>
 
           <h2 className="home__label">Start from a template</h2>
-          <ul className="templates" role="list">
+          <ul className={`templates${allTemplates ? ' is-open' : ''}`} role="list">
             {TEMPLATES.map((t) => (
               <li key={t.id}>
                 <TemplateCard template={t} busy={creating === t.id} disabled={!!creating} onPick={() => void fromTemplate(t)} />
               </li>
             ))}
           </ul>
+          <button type="button" className="templates__more" onClick={() => setAllTemplates((v) => !v)} aria-expanded={allTemplates}>
+            {allTemplates ? 'Show fewer templates' : `Show all ${TEMPLATES.length} templates`}
+          </button>
         </section>
 
         <section className="home__designs" aria-labelledby="designs-heading">
