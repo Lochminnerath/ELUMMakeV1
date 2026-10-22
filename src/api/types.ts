@@ -1,84 +1,182 @@
-export type { Role } from './errors';
+/**
+ * Shared data shapes for ELUM Make. The Supabase API and the in-browser preview API both speak
+ * these, so the screens never know which one is behind them.
+ */
 
-/** A minimal public profile, returned when searching for people. */
-export interface PublicUser {
+/** What someone can do with a design. */
+export type Role = 'owner' | 'editor' | 'viewer';
+export type ShareRole = Exclude<Role, 'owner'>;
+
+/**
+ * `type`: an ELUM Type address (handle@type.elum.services).
+ * `external`: the person's own email provider.
+ */
+export type AccountType = 'type' | 'external';
+
+export interface User {
   id: string;
   name: string;
   email: string;
+  /** Avatar colour, one of the product colours. */
   color: string;
-  accountType: 'external' | 'google' | 'github';
-}
-
-/** Full user information returned from authenticated endpoints. */
-export interface User extends PublicUser {
+  accountType: AccountType;
   createdAt: string;
+  /** Their profile picture (set in ELUM Account), as a link the browser can load. */
+  pictureUrl?: string | null;
 }
 
-/** A signed-in session containing the user. */
+export type PublicUser = Pick<User, 'id' | 'name' | 'email' | 'color'>;
+
 export interface Session {
   user: User;
 }
 
-/** User role within a shared design. */
-export type ShareRole = 'viewer' | 'commenter' | 'editor';
-
-/** A share record linking a user to a design with a role. */
-export interface Share {
-  id: string;
+export interface SignUpInput {
   name: string;
+  /** Their own email, for `external` accounts. Unused for Type accounts. */
   email: string;
-  color: string;
-  accountType: 'external' | 'google' | 'github';
-  role: ShareRole;
+  password: string;
+  /** Defaults to `external`. `type` creates an ELUM Type address (needs the ELUM platform). */
+  accountType?: AccountType;
+  /** Type accounts: the name before @<type domain>. */
+  handle?: string;
+  /** Type accounts: an outside address for getting back in after a forgotten password. */
+  recoveryEmail?: string;
 }
 
-/** A design summary, used in list views. */
+export interface SignInInput {
+  /** An email, an ELUM Type address, or just the name before @<type domain>. */
+  email: string;
+  password: string;
+}
+
+// ------------------------------------------------------------------ designs
+
+export type DesignKind = 'presentation' | 'poster' | 'social' | 'custom';
+
+/** A design's pages and what is on them. Kept here so the API layer has no editor dependency. */
+export interface DesignContent {
+  pages: Page[];
+}
+
+export interface Page {
+  id: string;
+  /** A colour, or a CSS gradient written as "linear:<angle>:<from>:<to>". */
+  background: string;
+  elements: DesignElement[];
+  /** Speaker notes, shown when presenting. */
+  notes?: string;
+}
+
+export type ElementType = 'text' | 'rect' | 'ellipse' | 'triangle' | 'star' | 'line' | 'image';
+
+interface BaseElement {
+  id: string;
+  type: ElementType;
+  /** Position and size in page pixels; the page is width × height from the design. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface TextElement extends BaseElement {
+  type: 'text';
+  text: string;
+  color: string;
+  fontSize: number;
+  fontWeight: string;
+  fontStyle: string;
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+  lineHeight: number;
+  letterSpacing: number;
+}
+
+export interface ShapeElement extends BaseElement {
+  type: 'rect' | 'ellipse' | 'triangle' | 'star';
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  /** Rounded corners, for rectangles. */
+  radius: number;
+}
+
+export interface LineElement extends BaseElement {
+  type: 'line';
+  /** Drawn from (x, y) to (x + w, y + h); w and h may be negative. */
+  stroke: string;
+  strokeWidth: number;
+  arrow: boolean;
+  dashed: boolean;
+}
+
+export interface ImageElement extends BaseElement {
+  type: 'image';
+  /** "storage:<path>" for pictures uploaded to the design, or a data: / https: URL. */
+  src: string;
+  fit: 'cover' | 'contain';
+  radius: number;
+}
+
+export type DesignElement = TextElement | ShapeElement | LineElement | ImageElement;
+
 export interface DesignSummary {
   id: string;
   title: string;
-  kind: 'presentation' | 'document' | 'poster' | 'social';
+  kind: DesignKind;
   width: number;
   height: number;
-  role: Role | null;
-  owner: User | null;
+  role: Role;
+  owner: PublicUser | null;
   createdAt: string;
   updatedAt: string;
   pageCount: number;
-  cover: string | null;
-  tags?: string[];
-  viewCount?: number;
+  /** The first page, for thumbnails. */
+  cover: Page | null;
 }
 
-/** Full design with content. */
 export interface Design extends DesignSummary {
   content: DesignContent;
   version: number;
-  updatedBy: User | null;
+  updatedBy: PublicUser | null;
 }
 
-/** Input for creating a new design. */
 export interface NewDesignInput {
   title?: string;
-  kind?: 'presentation' | 'document' | 'poster' | 'social';
+  kind?: DesignKind;
   width?: number;
   height?: number;
   content?: DesignContent;
-  tags?: string[];
 }
 
-/** Result of saving a design. */
 export interface SaveResult {
   version: number;
   updatedAt: string;
 }
 
-/** A design page (image URL or JSON content). */
-export type DesignPage = string | Record<string, unknown>;
-
-/** Design content containing pages. */
-export interface DesignContent {
-  pages: DesignPage[];
+export interface Share extends PublicUser {
+  role: ShareRole;
 }
+
+// ------------------------------------------------------------ notifications
+
+export type ServiceId = 'write' | 'type' | 'browse' | 'make' | 'store';
+
+export interface AppNotification {
+  id: string;
+  service: ServiceId | 'elum';
+  type: string;
+  title: string;
+  body: string | null;
+  /** A path inside the service, or a full URL. */
+  link: string | null;
+  createdAt: string;
+  readAt: string | null;
+  actor: Pick<PublicUser, 'id' | 'name' | 'color'> | null;
+}
+
+// ------------------------------------------------------------ enhanced features
 
 /** Brand kit asset (color or font). */
 export interface BrandKitAsset {
@@ -99,7 +197,7 @@ export interface BrandKit {
   };
   isPublic: boolean;
   updatedAt: string;
-  owner: User | null;
+  owner: PublicUser | null;
 }
 
 /** A comment on a design. */
@@ -108,7 +206,7 @@ export interface Comment {
   body: string;
   position: { page: number; x: number; y: number } | null;
   resolved: boolean;
-  user: User;
+  user: PublicUser;
   createdAt: string;
   updatedAt: string;
   replies: Comment[];
@@ -122,7 +220,7 @@ export interface Annotation {
   y: number;
   body: string;
   resolved: boolean;
-  user: User;
+  user: PublicUser;
   createdAt: string;
   updatedAt: string;
 }
@@ -131,7 +229,7 @@ export interface Annotation {
 export interface DesignVersion {
   version: number;
   title: string;
-  savedBy: User | null;
+  savedBy: PublicUser | null;
   savedAt: string;
   preview: string | null;
 }
@@ -142,13 +240,13 @@ export interface DesignTemplate {
   title: string;
   description: string | null;
   category: string;
-  kind: 'presentation' | 'document' | 'poster' | 'social';
+  kind: DesignKind;
   width: number;
   height: number;
   thumbnail: string | null;
   isPublic: boolean;
   updatedAt: string;
-  owner: User | null;
+  owner: PublicUser | null;
 }
 
 /** A favorite design. */
@@ -156,20 +254,6 @@ export interface Favorite {
   id: string;
   designId: string;
   createdAt: string;
-}
-
-/** Sign-up input. */
-export interface SignUpInput {
-  name: string;
-  email: string;
-  password: string;
-  accountType?: 'external' | 'google' | 'github';
-}
-
-/** Sign-in input. */
-export interface SignInInput {
-  email: string;
-  password: string;
 }
 
 /** Accepted image MIME types for uploads. */
