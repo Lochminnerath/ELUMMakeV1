@@ -25,7 +25,7 @@ export interface User {
   pictureUrl?: string | null;
 }
 
-export type PublicUser = Pick<User, 'id' | 'name' | 'email' | 'color' | 'accountType'>;
+export type PublicUser = Pick<User, 'id' | 'name' | 'email' | 'color'>;
 
 export interface Session {
   user: User;
@@ -78,21 +78,33 @@ interface BaseElement {
   y: number;
   w: number;
   h: number;
+  /** Degrees, clockwise, around the centre. */
+  rotation: number;
+  opacity: number;
+  locked?: boolean;
+  hidden?: boolean;
+  name?: string;
+}
   hidden?: boolean;
   locked?: boolean;
-}
+  rotation?: number;
 
 export interface TextElement extends BaseElement {
   type: 'text';
   text: string;
+  fontFamily: string;
   fontSize: number;
-  fontWeight: string;
-  fontStyle: string;
-  textAlign: 'left' | 'center' | 'right';
+  fontWeight: number;
+  italic: boolean;
+  underline: boolean;
+  align: 'left' | 'center' | 'right';
+  color: string;
   lineHeight: number;
   letterSpacing: number;
-  color: string;
 }
+  fontFamily: string;
+  italic: boolean;
+  underline: boolean;
 
 export interface ShapeElement extends BaseElement {
   type: 'rect' | 'ellipse' | 'triangle' | 'star';
@@ -135,7 +147,6 @@ export interface DesignSummary {
   pageCount: number;
   /** The first page, for thumbnails. */
   cover: Page | null;
-  tags?: string[];
 }
 
 export interface Design extends DesignSummary {
@@ -150,7 +161,6 @@ export interface NewDesignInput {
   width?: number;
   height?: number;
   content?: DesignContent;
-  tags?: string[];
 }
 
 export interface SaveResult {
@@ -258,12 +268,3 @@ export interface Favorite {
   designId: string;
   createdAt: string;
 }
-
-/** Accepted image MIME types for uploads. */
-export const ACCEPTED_IMAGE_TYPES = [
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-  'image/gif',
-  'image/svg+xml',
-];
