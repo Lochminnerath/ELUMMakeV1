@@ -1,6 +1,6 @@
-import { ApiError, type Role } from '../errors';
+import { ApiError } from '../errors';
 import type {
-  MakeApi,
+
   BrandKit,
   BrandKitAsset,
   Comment,
@@ -21,7 +21,7 @@ import type {
   SignUpInput,
   User,
 } from '../types';
-import { ACCEPTED_IMAGE_TYPES } from '../types';
+import type { MakeApi } from '../client';
 import { createClient } from './client';
 
 export class SupabaseApi implements MakeApi {
