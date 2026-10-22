@@ -1,3 +1,4 @@
+import { SupportLink } from '../components/SupportLink';
 import { LayoutTemplate, MoreHorizontal, Plus, Search, Star as StarIcon, Tag, X } from 'lucide-react';
 import { RenameIcon } from '../components/icons/ElumIcons';
 import { DeleteIcon, DuplicateIcon, SignOutIcon } from '../components/icons/ElumIcons';
@@ -138,7 +139,7 @@ export function HomePage() {
         else next.add(d.id);
         return next;
       });
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'designs-failed' });
     }
   };
 
@@ -150,7 +151,7 @@ export function HomePage() {
       const design = await api.createFromTemplate(t.id);
       navigate(`/m/${design.id}`);
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'designs-failed' });
       setCreating(null);
     }
   };
@@ -161,7 +162,7 @@ export function HomePage() {
       const design = await api.createDesign(input);
       navigate(`/m/${design.id}`, { replace });
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'designs-failed' });
       setCreating(null);
     }
   };
@@ -205,7 +206,7 @@ export function HomePage() {
       setDesigns((list) => [copy, ...(list ?? [])]);
       toast(`Made a copy of “${d.title}”.`, { tone: 'success' });
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'designs-failed' });
     }
   };
 
@@ -328,6 +329,7 @@ export function HomePage() {
               <button type="button" className="elum-btn elum-btn--secondary elum-btn--sm" onClick={() => void load()}>
                 Try again
               </button>
+              <SupportLink app="make" code="designs-failed" message={error} />
             </div>
           ) : designs === null ? (
             <ul className="design-grid" role="list" aria-busy="true" aria-label="Loading your designs">
@@ -645,7 +647,7 @@ function RemoveDialog({ design, onClose, onRemoved }: { design: DesignSummary | 
       onRemoved(design.id);
       onClose();
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'designs-failed' });
     } finally {
       setBusy(false);
     }

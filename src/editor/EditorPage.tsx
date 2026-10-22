@@ -29,6 +29,7 @@ import { ShareIcon } from '../components/ShareIcon';
 import './editor.css';
 import { ElumLauncher } from '../components/ElumLauncher';
 import { useFavicon } from '../lib/favicon';
+import { SupportLinks } from '../components/SupportLink';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'offline';
 const SAVE_DELAY = 900;
@@ -71,6 +72,7 @@ export default function EditorPage() {
         <Link to="/" className="elum-btn elum-btn--primary">
           Go to your designs
         </Link>
+        <SupportLinks app="make" code="open-failed" message={error} />
       </div>
     );
   }
@@ -275,7 +277,7 @@ function Editor({ initial }: { initial: Design }) {
       await api.renameDesign(initial.id, next);
       initial.title = next;
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
     }
   };
 
@@ -387,11 +389,11 @@ function Editor({ initial }: { initial: Design }) {
             void api
               .restoreVersion(initial.id, before)
               .then(reload)
-              .catch((e) => toast(errorMessage(e), { tone: 'error' })),
+              .catch((e) => toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' })),
         },
       });
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
       throw e;
     }
   };
@@ -425,7 +427,7 @@ function Editor({ initial }: { initial: Design }) {
       setComments((list) => list?.map((c) => (c.id === id ? { ...c, resolved } : c)) ?? null);
       if (resolved) toast('Resolved. You will find it under Resolved.', { action: { label: 'Reopen', onClick: () => void resolveComment(id, false) } });
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
     }
   };
   const pinNumbers = useMemo(() => numberPins(comments ?? []), [comments]);
@@ -476,7 +478,7 @@ function Editor({ initial }: { initial: Design }) {
       setSize({ width, height });
       setZoomMode('fit');
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
     }
   };
 
@@ -511,7 +513,7 @@ function Editor({ initial }: { initial: Design }) {
         }
         add(el);
       } catch (e) {
-        toast(errorMessage(e), { tone: 'error' });
+        toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
       }
     }
   };
