@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RELEASES, tourSteps, unseenReleases, type Release } from './releases';
+import { RELEASES, tourSteps, unseenReleases, whatsNewPlan, type Release } from './releases';
 
 const r = (id: string): Release => ({ id, date: id, title: id, intro: 'i', features: [{ title: 't', text: 'x', art: 'spark' }] });
 const list = [r('c'), r('b'), r('a')];
@@ -32,5 +32,25 @@ describe("what's new", () => {
     for (const release of RELEASES) expect(release.features.length).toBeGreaterThan(0);
     const keys = tourSteps(RELEASES).map((s) => s.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  describe('plan', () => {
+    it('shows nothing to a brand-new visitor and records the latest quietly', () => {
+      expect(whatsNewPlan(list, null, null)).toEqual({ show: [], record: 'c' });
+    });
+
+    it('shows only releases newer than the newest seen, on the account or the device', () => {
+      expect(whatsNewPlan(list, 'a', null).show.map((x) => x.id)).toEqual(['c', 'b']);
+      expect(whatsNewPlan(list, 'a', 'b').show.map((x) => x.id)).toEqual(['c']);
+      expect(whatsNewPlan(list, null, 'b')).toEqual({ show: [list[0]], record: 'c' });
+    });
+
+    it('records nothing once the account holds the latest', () => {
+      expect(whatsNewPlan(list, 'c', null)).toEqual({ show: [], record: null });
+    });
+
+    it('treats a release that no longer exists as nothing recorded', () => {
+      expect(whatsNewPlan(list, 'gone', null)).toEqual({ show: [], record: 'c' });
+    });
   });
 });

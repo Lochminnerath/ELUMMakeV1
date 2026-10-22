@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Popover } from '../components/Popover';
 import { SWATCHES } from './model';
+import { useKit } from './kit';
 
 const RECENT_KEY = 'elum.make.custom-colours';
 const RECENT_LIMIT = 8;
@@ -52,6 +53,7 @@ export function ColorField({ label, value, onChange, allowNone = false }: { labe
 }
 
 function ColourPanel({ label, value, allowNone, onChange, close }: { label: string; value: string; allowNone: boolean; onChange(color: string): void; close(): void }) {
+  const kit = useKit();
   const [recent, setRecent] = useState(recentColours);
   const [code, setCode] = useState(/^#[0-9a-f]{6}$/i.test(value) ? value : '');
   const parsed = parseHex(code);
@@ -80,6 +82,14 @@ function ColourPanel({ label, value, allowNone, onChange, close }: { label: stri
 
   return (
     <div className="color-pop__body">
+      {kit && kit.colors.length > 0 && (
+        <div className="color-pop__kit">
+          <span className="color-pop__heading">{kit.name}</span>
+          <div className="color-pop__grid" role="group" aria-label={`${kit.name} colours`}>
+            {kit.colors.map(swatch)}
+          </div>
+        </div>
+      )}
       <div className="color-pop__grid" role="group" aria-label={label}>
         {allowNone && (
           <button type="button" className="color-pop__swatch" data-none aria-label="No colour" aria-pressed={value === 'none'} onClick={() => pick('none')} />

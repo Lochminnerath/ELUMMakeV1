@@ -348,3 +348,74 @@ img {
     animation-duration: 0ms !important;
   }
 }
+
+/* Phones and touch screens: 16px fields, so iPhone does not zoom in when one is focused. */
+@media (max-width: 760px), (pointer: coarse) {
+  input,
+  select,
+  textarea,
+  [contenteditable='true'] {
+    font-size: 16px !important;
+  }
+}
+
+/* Nothing wider than the screen on a phone. */
+html,
+body {
+  overflow-x: clip;
+}
+
+/* Skeletons: the shape of what is coming, with a slow shimmer. */
+.skeleton {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(100deg, var(--hairline) 30%, color-mix(in srgb, var(--hairline) 40%, transparent) 50%, var(--hairline) 70%);
+  background-size: 300% 100%;
+  animation: skeleton-shimmer 1.6s linear infinite;
+}
+.skeleton--line {
+  height: 10px;
+  width: 100%;
+  border-radius: var(--radius-pill);
+}
+.skeleton--short {
+  width: 55%;
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* Lists come in one after another; set --i on each item. */
+.stagger {
+  animation: rise-in var(--dur-panel) var(--ease) both;
+  animation-delay: calc(min(var(--i, 0), 12) * 35ms);
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+/* Each screen fades in as it opens. */
+.route-in {
+  animation: route-in var(--dur-panel) var(--ease) both;
+}
+@keyframes route-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .stagger,
+  .route-in {
+    animation: none !important;
+  }
+}

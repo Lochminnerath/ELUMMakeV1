@@ -1,4 +1,5 @@
 import type {
+  Appear,
   DesignContent,
   DesignElement,
   DesignKind,
@@ -6,6 +7,7 @@ import type {
   ImageElement,
   LineElement,
   Page,
+  PageTransition,
   ShapeElement,
   TextElement,
 } from '../api/types';
@@ -145,12 +147,29 @@ export function normalizeContent(raw: unknown): DesignContent {
       id: typeof p.id === 'string' && p.id ? p.id : uid(),
       background: typeof p.background === 'string' ? p.background : '#ffffff',
       notes: typeof p.notes === 'string' ? p.notes : undefined,
+      transition: TRANSITIONS.includes(p.transition as PageTransition) && p.transition !== 'none' ? p.transition : undefined,
       elements: (Array.isArray(p.elements) ? p.elements : [])
         .filter((e) => e && typeof e === 'object' && ['text', 'rect', 'ellipse', 'triangle', 'star', 'line', 'image'].includes(e.type))
-        .map((e) => ({ ...e, id: e.id || uid(), rotation: Number(e.rotation) || 0, opacity: e.opacity ?? 1 })) as DesignElement[],
-    }));
+        .map((e) => ({
+          ...e,
+          id: e.id || uid(),
+          rotation: Number(e.rotation) || 0,
+          opacity: e.opacity ?? 1,
+          groupId: typeof e.groupId === 'string' && e.groupId ? e.groupId : undefined,
+          appear: APPEARS.includes(e.appear as Appear) ? e.appear : undefined,
+        })) as DesignElement[],
+    }))
+    .map((p) => {
+      // A group of one is no group.
+      const counts = new Map<string, number>();
+      for (const e of p.elements) if (e.groupId) counts.set(e.groupId, (counts.get(e.groupId) ?? 0) + 1);
+      return { ...p, elements: p.elements.map((e) => (e.groupId && counts.get(e.groupId)! < 2 ? { ...e, groupId: undefined } : e)) };
+    });
   return { pages: clean.length ? clean : [newPage()] };
 }
+
+export const TRANSITIONS: PageTransition[] = ['none', 'fade', 'slide'];
+export const APPEARS: Appear[] = ['fade', 'slide', 'scale'];
 
 // ------------------------------------------------------------------- geometry
 
@@ -338,4 +357,153 @@ export function starPoints(w: number, h: number): string {
     pts.push(`${(w / 2 + Math.cos(a) * r * w).toFixed(2)},${(h / 2 + Math.sin(a) * r * h * 1.05 + h * 0.03).toFixed(2)}`);
   }
   return pts.join(' ');
+}
+
+// ------------------------------------------------------------- arranging many
+
+export type AlignHow = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
+
+/**
+ * Lines elements up: with two or more, against the box around them all; with one, against the page.
+ * Locked elements stay put. Returns new elements, in the same order.
+ */
+export function alignElements(els: DesignElement[], how: AlignHow, page: { width: number; height: number }): DesignElement[] {
+  const target = els.length > 1 ? unionBox(els.map(bounds))! : { x: 0, y: 0, w: page.width, h: page.height };
+  return els.map((el) => {
+    if (el.locked) return el;
+    const b = bounds(el);
+    const dx = how === 'left' ? target.x - b.x : how === 'right' ? target.x + target.w - (b.x + b.w) : how === 'hcenter' ? target.x + target.w / 2 - (b.x + b.w / 2) : 0;
+    const dy = how === 'top' ? target.y - b.y : how === 'bottom' ? target.y + target.h - (b.y + b.h) : how === 'vcenter' ? target.y + target.h / 2 - (b.y + b.h / 2) : 0;
+    return { ...el, x: Math.round(el.x + dx), y: Math.round(el.y + dy) };
+  });
+}
+
+/** Spaces three or more elements so the gaps between them are equal; the outer two stay put. */
+export function distributeElements(els: DesignElement[], axis: 'x' | 'y'): DesignElement[] {
+  const items = els.filter((el) => !el.locked).map((el) => ({ el, b: bounds(el) }));
+  if (items.length < 3) return els;
+  items.sort((a, b) => (axis === 'x' ? a.b.x - b.b.x : a.b.y - b.b.y));
+  const first = items[0].b;
+  const last = items[items.length - 1].b;
+  const total = items.reduce((s, i) => s + (axis === 'x' ? i.b.w : i.b.h), 0);
+  const span = axis === 'x' ? last.x + last.w - first.x : last.y + last.h - first.y;
+  const gap = (span - total) / (items.length - 1);
+  let at = axis === 'x' ? first.x : first.y;
+  const moves = new Map<string, number>();
+  for (const i of items) {
+    moves.set(i.el.id, at - (axis === 'x' ? i.b.x : i.b.y));
+    at += (axis === 'x' ? i.b.w : i.b.h) + gap;
+  }
+  return els.map((el) => {
+    const d = moves.get(el.id);
+    if (d === undefined) return el;
+    return axis === 'x' ? { ...el, x: Math.round(el.x + d) } : { ...el, y: Math.round(el.y + d) };
+  });
+}
+
+// ------------------------------------------------------------------- groups
+
+/** The selection grown to whole groups: picking one member picks the group. */
+export function expandGroups(elements: DesignElement[], ids: string[]): string[] {
+  const groups = new Set(elements.filter((el) => ids.includes(el.id) && el.groupId).map((el) => el.groupId));
+  if (!groups.size) return ids;
+  return elements.filter((el) => ids.includes(el.id) || (el.groupId && groups.has(el.groupId))).map((el) => el.id);
+}
+
+/** Groups these elements (two or more) into one new group. */
+export function groupElements(page: Page, ids: string[]): Page {
+  if (ids.length < 2) return page;
+  const groupId = uid();
+  return { ...page, elements: page.elements.map((el) => (ids.includes(el.id) ? { ...el, groupId } : el)) };
+}
+
+/** Takes these elements, and everyone grouped with them, out of their groups. */
+export function ungroupElements(page: Page, ids: string[]): Page {
+  const groups = new Set(page.elements.filter((el) => ids.includes(el.id) && el.groupId).map((el) => el.groupId));
+  return { ...page, elements: page.elements.map((el) => (el.groupId && groups.has(el.groupId) ? { ...el, groupId: undefined } : el)) };
+}
+
+/** True when the selection is exactly one whole group. */
+export function isOneGroup(elements: DesignElement[], ids: string[]): boolean {
+  const sel = elements.filter((el) => ids.includes(el.id));
+  if (sel.length < 2 || !sel[0].groupId) return false;
+  const g = sel[0].groupId;
+  return sel.every((el) => el.groupId === g) && elements.filter((el) => el.groupId === g).length === sel.length;
+}
+
+// --------------------------------------------------------------- copying style
+
+/** The look of an element, without its place, size or content. */
+export type Style = Partial<Record<'fill' | 'stroke' | 'strokeWidth' | 'radius' | 'color' | 'fontFamily' | 'fontSize' | 'fontWeight' | 'italic' | 'underline' | 'align' | 'lineHeight' | 'letterSpacing' | 'opacity' | 'dashed', unknown>>;
+
+const STYLE_KEYS = ['fill', 'stroke', 'strokeWidth', 'radius', 'color', 'fontFamily', 'fontSize', 'fontWeight', 'italic', 'underline', 'align', 'lineHeight', 'letterSpacing', 'opacity', 'dashed'] as const;
+
+export function copyStyle(el: DesignElement): Style {
+  const style: Style = {};
+  for (const k of STYLE_KEYS) if (k in el) style[k] = (el as unknown as Record<string, unknown>)[k];
+  // A text's colour paints a shape's fill and the other way round.
+  if (el.type === 'text') style.fill = el.color;
+  else if ('fill' in el) style.color = el.fill;
+  return style;
+}
+
+/** Puts a copied style on an element, only where the element has that property. */
+export function pasteStyle(el: DesignElement, style: Style): DesignElement {
+  const next = { ...el } as unknown as Record<string, unknown>;
+  for (const k of STYLE_KEYS) if (k in el && style[k] !== undefined) next[k] = style[k];
+  const out = next as unknown as DesignElement;
+  return out.type === 'text' ? { ...out, h: textHeight(out) } : out;
+}
+
+// ------------------------------------------------------------------ brand kits
+
+/**
+ * Recolours a page with a kit: text takes the darkest kit colour (or the first), shapes and lines
+ * take the kit colours in turn, headings and body take the kit's first and second fonts.
+ */
+export function applyKitToPage(page: Page, kit: { colors: string[]; fonts: string[] }): Page {
+  const colors = kit.colors.filter((c) => /^#[0-9a-f]{3,8}$/i.test(c));
+  const fonts = kit.fonts.filter(Boolean);
+  if (!colors.length && !fonts.length) return page;
+  const ink = colors.length ? [...colors].sort((a, b) => luminance(a) - luminance(b))[0] : null;
+  const accents = colors.filter((c) => c !== ink);
+  const paint = accents.length ? accents : colors;
+  let n = 0;
+  const texts = page.elements.filter((el): el is TextElement => el.type === 'text');
+  const biggest = texts.length ? Math.max(...texts.map((t) => t.fontSize)) : 0;
+  return {
+    ...page,
+    elements: page.elements.map((el) => {
+      if (el.locked) return el;
+      if (el.type === 'text') {
+        const heading = el.fontSize >= biggest * 0.6 || el.fontWeight >= 600;
+        const fontFamily = fonts.length ? (heading ? fonts[0] : (fonts[1] ?? fonts[0])) : el.fontFamily;
+        const next = { ...el, color: ink && luminance(el.color) < 0.5 ? ink : el.color, fontFamily };
+        return { ...next, h: textHeight(next) };
+      }
+      if (!paint.length) return el;
+      if (el.type === 'line') return { ...el, stroke: paint[n++ % paint.length] };
+      if (el.type === 'image') return el;
+      return { ...el, fill: paint[n++ % paint.length] };
+    }),
+  };
+}
+
+/** Relative brightness of a #rgb or #rrggbb colour, 0 (black) to 1 (white). */
+export function luminance(hex: string): number {
+  let v = hex.replace('#', '');
+  if (v.length === 3) v = v.split('').map((c) => c + c).join('');
+  const n = parseInt(v.slice(0, 6), 16);
+  if (!Number.isFinite(n)) return 1;
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+// ------------------------------------------------------------- present steps
+
+/** The elements that come in on a click, in the order they come in (bottom layer first). */
+export function appearOrder(page: Page): string[] {
+  return page.elements.filter((el) => el.appear && !el.hidden).map((el) => el.id);
 }

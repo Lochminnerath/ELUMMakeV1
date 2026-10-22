@@ -497,6 +497,22 @@ export class LocalApi implements MakeApi {
     this.write(store);
   }
 
+  async seenRelease(key: string): Promise<string | null> {
+    try {
+      return localStorage.getItem(`elum.make.account.${this.me().id}.${key}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async rememberSeen(key: string, id: string): Promise<void> {
+    try {
+      localStorage.setItem(`elum.make.account.${this.me().id}.${key}`, id);
+    } catch {
+      // Preview mode keeps everything in this browser; without storage there is nowhere to keep it.
+    }
+  }
+
   async renameDesign(id: string, title: string): Promise<void> {
     if (!title.trim()) throw new ApiError('invalid', 'Give the design a name.');
     const { store, design } = this.find(id, 'editor');
