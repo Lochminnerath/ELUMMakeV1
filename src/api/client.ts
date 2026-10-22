@@ -18,6 +18,7 @@ import type {
   ShareRole,
   SignInInput,
   SignUpInput,
+  DesignKind,
   User,
 } from './types';
 import { ACCEPTED_IMAGE_TYPES } from './types';
@@ -77,7 +78,7 @@ export interface MakeApi {
   saveAsTemplate(designId: string, title: string, description?: string, category?: string): Promise<DesignTemplate>;
 
   // --- search & analytics ---
-  tagSearch(tags: string[], kind?: string): Promise<DesignSummary[]>;
+  tagSearch(tags: string[], kind?: DesignKind): Promise<DesignSummary[]>;
   incrementViews(designId: string): Promise<void>;
 
   // --- favorites ---
