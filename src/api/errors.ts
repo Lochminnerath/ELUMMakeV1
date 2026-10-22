@@ -1,5 +1,3 @@
-export type Role = 'owner' | 'editor' | 'viewer';
-
 export type ApiErrorCode =
   | 'unauthorized'
   | 'invalid_credentials'

@@ -48,6 +48,35 @@
 .templates {
   grid-auto-columns: 220px;
 }
+.templates__more {
+  display: none;
+}
+/* On wider screens the templates wrap into a grid: two rows, then the rest on request. */
+@media (min-width: 641px) {
+  .templates {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    overflow: visible;
+  }
+  .templates:not(.is-open) > li:nth-child(n + 11) {
+    display: none;
+  }
+  .templates__more {
+    display: inline-flex;
+    margin-top: var(--space-3);
+    padding: 8px 16px;
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    background: var(--surface, transparent);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .templates__more:hover {
+    border-color: var(--accent, #ec7fa9);
+  }
+}
 .sizes > li,
 .templates > li {
   scroll-snap-align: start;

@@ -57,4 +57,38 @@ describe('preview mode', () => {
     await signUp(api, 'Cy', 'cy@example.org');
     await expect(api.getDesign(d.id)).rejects.toMatchObject({ code: 'not_found' });
   });
+
+  it('keeps history, comments, kits, templates, tags and favourites', async () => {
+    const api = new LocalApi();
+    await signUp(api, 'Ada', 'ada@example.org');
+    const page = (id: string) => ({ id, background: '#fff', elements: [] });
+    const d = await api.createDesign({ title: 'Deck', content: { pages: [page('p1')] } });
+    await api.saveDesign(d.id, 1, { pages: [page('p2')] });
+    expect((await api.versionHistory(d.id)).map((v) => v.version)).toEqual([1]);
+    expect((await api.restoreVersion(d.id, 1)).version).toBe(3);
+    expect((await api.getDesign(d.id)).content.pages[0].id).toBe('p1');
+
+    const c = await api.addComment(d.id, '  Nice  ', undefined, { page: 0, x: 1, y: 2 });
+    await api.addComment(d.id, 'Thanks', c.id);
+    await api.resolveComment(c.id, true);
+    const [first] = await api.comments(d.id);
+    expect(first).toMatchObject({ body: 'Nice', resolved: true, position: { page: 0 } });
+    expect(first.replies[0].body).toBe('Thanks');
+    await expect(api.addComment(d.id, '   ')).rejects.toMatchObject({ code: 'invalid' });
+
+    const kit = await api.saveBrandKit(null, 'ELUM', '', { colors: [{ value: '#ec7fa9' }], fonts: [] });
+    expect((await api.getBrandKit(kit.id)).assets.colors[0].value).toBe('#ec7fa9');
+
+    const t = await api.saveAsTemplate(d.id, 'Mine', undefined, 'work');
+    expect(await api.templates('other')).toEqual([]);
+    expect((await api.getDesign((await api.createFromTemplate(t.id)).id)).content.pages[0].id).toBe('p1');
+
+    await api.setTags(d.id, ['Launch', ' launch ', 'Q4']);
+    expect((await api.tagSearch(['q4']))[0].tags).toEqual(['launch', 'q4']);
+    await api.toggleFavorite(d.id, true);
+    await api.toggleFavorite(d.id, true);
+    expect(await api.favorites()).toHaveLength(1);
+    await api.toggleFavorite(d.id, false);
+    expect(await api.favorites()).toHaveLength(0);
+  });
 });

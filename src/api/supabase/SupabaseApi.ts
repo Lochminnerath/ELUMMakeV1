@@ -1,16 +1,17 @@
+import { createClient, type Session as AuthSession, type SupabaseClient } from '@supabase/supabase-js';
+import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_BYTES, type MakeApi, type NotificationsApi } from '../client';
 import { ApiError } from '../errors';
 import type {
-
+  AppNotification,
   BrandKit,
   BrandKitAsset,
   Comment,
-  Design,
-  DesignContent,
-  DesignSummary,
   DesignTemplate,
   DesignVersion,
   Favorite,
-  Annotation,
+  Design,
+  DesignContent,
+  DesignSummary,
   NewDesignInput,
   PublicUser,
   SaveResult,
@@ -21,91 +22,132 @@ import type {
   SignUpInput,
   User,
 } from '../types';
-import type { MakeApi } from '../client';
-import { createClient } from './client';
+import { checkSignUp, cleanName, cleanTitle, handleProblem, isEmail, MIN_PASSWORD } from '../validation';
+import { cookieStorage, usableCookieDomain } from './cookieStorage';
+import { PENDING_ROLE, tokenRole } from '../../security/approvals';
+
+/**
+ * ELUM Make on the ELUM platform (Supabase):
+ * - Auth: Supabase Auth holds every account (Authentication > Users). A database trigger gives
+ *   each new account a public.profiles row, which is what other people see.
+ * - Designs: the make schema, reached only through the public.make_* functions, which check who
+ *   may see and change what (supabase/migrations).
+ * - Pictures: the private make-images bucket, one folder per design, read through signed links.
+ */
+
+const BUCKET = 'make-images';
+const STORAGE_PREFIX = 'storage:';
+const SIGNED_URL_SECONDS = 60 * 60;
+const PROFILE = 'id, name, email, color, account_type, created_at';
+/** Where Type addresses live when the database cannot say. */
+const DEFAULT_TYPE_DOMAIN = 'type.elum.services';
+
+interface ProfileRow extends PublicUser {
+  account_type: 'type' | 'external' | null;
+  created_at: string;
+}
+
+/** What Supabase and PostgREST put in their errors. */
+interface RawError {
+  code?: string;
+  message?: string;
+  details?: string | null;
+  status?: number;
+  statusCode?: string | number;
+  name?: string;
+}
+
+/** Translates Supabase errors into the app's error codes and plain messages. */
+export function toApiError(error: RawError | null | undefined, fallback = 'Something went wrong. Please try again.'): ApiError {
+  const code = String(error?.code ?? '');
+  const status = Number(error?.status ?? error?.statusCode ?? 0);
+  const message = error?.message ?? '';
+  // Make's own database functions raise PostgREST status codes with readable messages.
+  if (code === 'PT409') return new ApiError('conflict', message, { version: Number(error?.details) });
+  if (code === 'PT403') return new ApiError('forbidden', message);
+  if (code === 'PT404') return new ApiError('not_found', message);
+  if (code === 'PT400') return new ApiError('invalid', message);
+  if (code === 'PT429' || status === 429) return new ApiError('rate_limited', message || 'Too many requests. Wait a little and try again.');
+  if (code === 'PT401' || code === 'PGRST301' || code === 'PGRST303' || status === 401) {
+    return new ApiError('unauthorized', 'Your session has ended. Sign in again.');
+  }
+  if (code === '42501' || status === 403) return new ApiError('forbidden', 'You do not have permission to do that.');
+  if (code === 'PGRST202' || code === '42883') {
+    return new ApiError('server', 'Make is not set up in this database yet. Run the Make migration (supabase/README.md).');
+  }
+  if (code === '22P02') return new ApiError('not_found', 'This design does not exist, or it has not been shared with you.');
+  if (status === 413 || /exceeded the maximum allowed size/i.test(message)) return new ApiError('too_large', 'Pictures can be up to 15 MB.');
+  if (error?.name === 'AuthRetryableFetchError' || /failed to fetch|network/i.test(message)) {
+    return new ApiError('network', 'We could not reach ELUM. Check your connection and try again.');
+  }
+  return new ApiError('server', fallback);
+}
+
+/** The error an edge function answered with, such as type-signup's "That name is taken." */
+async function functionError(error: unknown): Promise<ApiError> {
+  const context = (error as { context?: Response }).context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const body = (await context.json()) as { error?: { code?: string; message?: string; details?: { field?: string } } };
+      const message = body.error?.message ?? 'Something went wrong. Please try again.';
+      switch (body.error?.code) {
+        case 'conflict':
+          return new ApiError('conflict', message, { field: 'handle' });
+        case 'invalid':
+          return new ApiError('invalid', message, body.error.details?.field ? { field: body.error.details.field } : undefined);
+        case 'rate_limited':
+          return new ApiError('rate_limited', message);
+        case 'forbidden':
+          return new ApiError('forbidden', message);
+        default:
+          return new ApiError('server', message);
+      }
+    } catch {
+      // Fall through.
+    }
+  }
+  return new ApiError('network', 'ELUM Type sign-up is not reachable. Check that the type-signup function is deployed.');
+}
 
 export class SupabaseApi implements MakeApi {
-  readonly mode = 'supabase' as const;
+  readonly mode = 'remote' as const;
+  readonly sb: SupabaseClient;
   private readonly unauthorizedHandlers = new Set<() => void>();
-  private readonly supabase = createClient();
+  private readonly signedUrls = new Map<string, { url: string; expires: number }>();
+  private linkProblem: string | null = null;
+  private domainLookup: Promise<string> | null = null;
 
-  // --- accounts ---
-
-  async restoreSession(): Promise<Session | null> {
-    const { data: { session }, error } = await this.supabase.auth.getSession();
-    if (error || !session) return null;
-    const { data: user } = await this.supabase
-      .from('users')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-    if (!user) return null;
-    return { user: this.toUser(user) };
-  }
-
-  async signUp(input: SignUpInput): Promise<Session> {
-    const { data, error } = await this.supabase.auth.signUp({
-      email: input.email,
-      password: input.password,
-      options: { data: { name: input.name, accountType: input.accountType ?? 'external' } },
-    });
-    if (error) throw new ApiError('server', error.message);
-    if (!data.user) throw new ApiError('server', 'Sign up failed.');
-    // Create user record
-    const { error: userError } = await this.supabase
-      .from('users')
-      .insert({
-        id: data.user.id,
-        name: input.name,
-        email: input.email,
-        accountType: input.accountType ?? 'external',
+  constructor(url: string, anonKey: string, client?: SupabaseClient) {
+    // With VITE_ELUM_COOKIE_DOMAIN set (such as .elum.services), the session lives in cookies on
+    // that domain, so one sign-in covers every ELUM service. Otherwise it stays in this site's storage.
+    const cookieDomain = typeof location === 'undefined' ? null : usableCookieDomain(import.meta.env.VITE_ELUM_COOKIE_DOMAIN, location.hostname);
+    this.sb =
+      client ??
+      createClient(url, anonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          ...(cookieDomain ? { storageKey: 'elum-auth', storage: cookieStorage({ domain: cookieDomain, secure: location.protocol === 'https:' }) } : {}),
+        },
       });
-    if (userError) throw new ApiError('server', userError.message);
-    const { data: user } = await this.supabase
-      .from('users')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
-    if (!user) throw new ApiError('server', 'Could not retrieve user.');
-    return { user: this.toUser(user) };
-  }
-
-  async signIn(input: SignInInput): Promise<Session> {
-    const { data, error } = await this.supabase.auth.signInWithPassword({
-      email: input.email,
-      password: input.password,
+    // A confirmation link that failed (expired, or already used) lands here with the reason in the
+    // address. Keep it to show on the sign-in page.
+    if (typeof location !== 'undefined' && /error_description=/.test(location.hash + location.search)) {
+      const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
+      const code = params.get('error_code');
+      this.linkProblem =
+        code === 'otp_expired'
+          ? 'That confirmation link has expired or was already used. Sign in, or send yourself a new link.'
+          : params.get('error_description')?.replace(/\+/g, ' ') ?? 'That link did not work. Try signing in.';
+    }
+    this.sb.auth.onAuthStateChange((event) => {
+      // Covers expiry, revocation and signing out in another tab.
+      if (event === 'SIGNED_OUT') {
+        this.signedUrls.clear();
+        this.unauthorizedHandlers.forEach((h) => h());
+      }
     });
-    if (error) throw new ApiError('invalid_credentials', error.message);
-    if (!data.user) throw new ApiError('server', 'Sign in failed.');
-    const { data: user } = await this.supabase
-      .from('users')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
-    if (!user) throw new ApiError('server', 'Could not retrieve user.');
-    return { user: this.toUser(user) };
-  }
-
-  async signOut(): Promise<void> {
-    const { error } = await this.supabase.auth.signOut();
-    if (error) throw new ApiError('server', error.message);
-  }
-
-  async updateProfile(input: { name: string }): Promise<User> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { error } = await this.supabase
-      .from('users')
-      .update({ name: input.name })
-      .eq('id', user.id);
-    if (error) throw new ApiError('server', error.message);
-    const { data: updatedUser } = await this.supabase
-      .from('users')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-    if (!updatedUser) throw new ApiError('server', 'Could not retrieve user.');
-    return this.toUser(updatedUser);
   }
 
   onUnauthorized(handler: () => void): () => void {
@@ -113,676 +155,466 @@ export class SupabaseApi implements MakeApi {
     return () => this.unauthorizedHandlers.delete(handler);
   }
 
-  // --- designs ---
+  /** Database calls, with errors turned into ApiErrors (and a lost session reported once). */
+  private async rpc<T>(name: string, args?: Record<string, unknown>, fallback?: string): Promise<T> {
+    const { data, error } = await this.sb.rpc(name, args);
+    if (error) {
+      const e = toApiError(error, fallback);
+      if (e.code === 'unauthorized') this.unauthorizedHandlers.forEach((h) => h());
+      throw e;
+    }
+    return data as T;
+  }
+
+  // ---------------------------------------------------------------- accounts
+
+  async restoreSession(): Promise<Session | null> {
+    const { data, error } = await this.sb.auth.getSession();
+    if (error || !data.session) return null;
+    try {
+      return await this.sessionFor(data.session);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'unauthorized') return null;
+      throw e;
+    }
+  }
+
+  async signUp(input: SignUpInput): Promise<Session> {
+    if (input.accountType === 'type') return this.signUpType(input);
+    const { name, email, password } = checkSignUp(input);
+    const { data, error } = await this.sb.auth.signUp({
+      email,
+      password,
+      options: { data: { name }, emailRedirectTo: `${window.location.origin}/` },
+    });
+    if (error) {
+      if (error.code === 'user_already_exists' || error.code === 'email_exists') {
+        throw new ApiError('email_taken', 'An account with this email already exists. Sign in instead.', { field: 'email' });
+      }
+      if (error.code === 'weak_password') throw new ApiError('invalid', error.message, { field: 'password' });
+      // Supabase keeps the account only once the confirmation email is sent. Its built-in sender
+      // only reaches the project's own team, so without an SMTP sender other sign-ups are dropped.
+      if (/sending.*email|email.*send/i.test(error.message ?? '') || error.code === 'unexpected_failure') {
+        throw new ApiError('server', 'We could not send your confirmation email, so the account was not created. ELUM email is not set up yet (Supabase > Authentication > Emails > SMTP Settings).');
+      }
+      if (error.code === 'signup_disabled') throw new ApiError('forbidden', 'New accounts are switched off right now (Supabase > Authentication > Sign In / Providers).');
+      if (error.code === 'email_address_invalid') throw new ApiError('invalid', 'Enter a valid email address.', { field: 'email' });
+      if (error.code === 'over_email_send_rate_limit' || error.status === 429) {
+        throw new ApiError('rate_limited', 'Too many attempts. Wait a minute and try again.');
+      }
+      throw toApiError(error);
+    }
+    // With email confirmation on, there is no session until the link is followed.
+    if (!data.session) {
+      throw new ApiError('confirm_email', `We sent a link to ${email}. Open it to confirm your email, then sign in.`);
+    }
+    return this.sessionFor(data.session);
+  }
+
+  /**
+   * A new ELUM Type address. Only the server may create one (it is verified by construction and
+   * sets account_type and handle), so the type-signup function makes the account; then we sign in.
+   */
+  private async signUpType(input: SignUpInput): Promise<Session> {
+    const name = cleanName(input.name);
+    const handle = (input.handle ?? '').trim().toLowerCase();
+    const problem = handleProblem(handle);
+    if (problem) throw new ApiError('invalid', problem, { field: 'handle' });
+    if (input.password.length < MIN_PASSWORD) {
+      throw new ApiError('invalid', `Use at least ${MIN_PASSWORD} characters for your password.`, { field: 'password' });
+    }
+    const recoveryEmail = input.recoveryEmail?.trim() || undefined;
+    if (recoveryEmail && !isEmail(recoveryEmail)) {
+      throw new ApiError('invalid', 'Enter a valid recovery email, or leave it empty.', { field: 'recoveryEmail' });
+    }
+    const { data, error } = await this.sb.functions.invoke<{ error?: RawError }>('type-signup', {
+      body: { handle, name, password: input.password, recoveryEmail },
+    });
+    if (error) throw await functionError(error);
+    if (data?.error) throw toApiError(data.error);
+    return this.signIn({ email: handle, password: input.password });
+  }
+
+  /** The domain Type addresses live on, from the database (elum.config type_domain). */
+  typeDomain(): Promise<string> {
+    this.domainLookup ??= Promise.resolve(this.sb.rpc('type_domain')).then(
+      ({ data }) => (typeof data === 'string' && data ? data : DEFAULT_TYPE_DOMAIN),
+      () => DEFAULT_TYPE_DOMAIN,
+    );
+    return this.domainLookup;
+  }
+
+  async handleAvailable(handle: string): Promise<boolean> {
+    if (handleProblem(handle)) return false;
+    return (await this.rpc<boolean>('elum_handle_available', { p_handle: handle.trim().toLowerCase() })) === true;
+  }
+
+  takeLinkProblem(): string | null {
+    const problem = this.linkProblem;
+    this.linkProblem = null;
+    return problem;
+  }
+
+  async resendConfirmation(email: string): Promise<void> {
+    const { error } = await this.sb.auth.resend({ type: 'signup', email: email.trim().toLowerCase(), options: { emailRedirectTo: `${window.location.origin}/` } });
+    if (error) {
+      if (error.status === 429) throw new ApiError('rate_limited', 'A link was sent a moment ago. Wait a minute and try again.');
+      throw toApiError(error);
+    }
+  }
+
+  async signIn(input: SignInInput): Promise<Session> {
+    // A Type address can be typed as just its name.
+    const login = input.email.trim().toLowerCase();
+    const email = login.includes('@') ? login : `${login}@${await this.typeDomain()}`;
+    const { data, error } = await this.sb.auth.signInWithPassword({ email, password: input.password });
+    if (error) {
+      if (error.code === 'email_not_confirmed') {
+        throw new ApiError('confirm_email', 'Confirm your email first. We sent you a link when you signed up.');
+      }
+      if (error.code === 'invalid_credentials' || error.status === 400) {
+        throw new ApiError('invalid_credentials', 'That email and password do not match.');
+      }
+      throw toApiError(error);
+    }
+    return this.sessionFor(data.session);
+  }
+
+  async signOut(): Promise<void> {
+    this.signedUrls.clear();
+    await this.sb.auth.signOut();
+  }
+
+  async updateProfile(input: { name: string }): Promise<User> {
+    const me = await this.me();
+    const { data, error } = await this.sb.from('profiles').update({ name: cleanName(input.name) }).eq('id', me).select(PROFILE).single<ProfileRow>();
+    if (error) throw toApiError(error);
+    return { ...toUser(data), pictureUrl: await this.pictureUrl(data.id) };
+  }
+
+  private async me(): Promise<string> {
+    const { data } = await this.sb.auth.getSession();
+    const id = data.session?.user.id;
+    if (!id) {
+      this.unauthorizedHandlers.forEach((h) => h());
+      throw new ApiError('unauthorized', 'Your session has ended. Sign in again.');
+    }
+    return id;
+  }
+
+  private async sessionFor(session: AuthSession): Promise<Session> {
+    // Waiting for approval from another device (ELUM Account > Security): nothing else answers it.
+    if (tokenRole(session.access_token) === PENDING_ROLE) {
+      throw new ApiError('approval_required', 'Approve this sign-in on a device you are already signed in to.');
+    }
+    const profile = await this.profileFor(session.user.id);
+    // Tell the platform this account uses Make. Optional: older databases lack the function.
+    void this.sb.rpc('elum_join_service', { p_service: 'make' }).then(() => undefined, () => undefined);
+    return { user: { ...toUser(profile), pictureUrl: await this.pictureUrl(profile.id) } };
+  }
+
+  /**
+   * The person's profile. An account Supabase Auth knows but the profile trigger missed gets one
+   * made now (elum_ensure_profile), so it can always sign in.
+   */
+  private async profileFor(id: string): Promise<ProfileRow> {
+    const load = () => this.sb.from('profiles').select(PROFILE).eq('id', id).maybeSingle<ProfileRow>();
+    let { data, error } = await load();
+    if (error) throw toApiError(error);
+    if (!data) {
+      const made = await this.sb.rpc('elum_ensure_profile');
+      if (made.error) {
+        throw new ApiError('server', 'Your account is missing its profile. Run the latest database migrations (profile_for_every_account), then sign in again.');
+      }
+      ({ data, error } = await load());
+      if (error) throw toApiError(error);
+      if (!data) throw new ApiError('server', 'Your account is missing its profile. Sign in again in a moment.');
+    }
+    return data;
+  }
+
+  /** The profile picture from ELUM Account, when there is one (older databases have none). */
+  private async pictureUrl(id: string): Promise<string | null> {
+    try {
+      const { data } = await this.sb.rpc('elum_pictures', { p_ids: [id] });
+      const path = (data as { picture: string }[] | null)?.[0]?.picture;
+      if (!path) return null;
+      const signed = await this.sb.storage.from('avatars').createSignedUrl(path, SIGNED_URL_SECONDS);
+      return signed.data?.signedUrl ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ------------------------------------------------- signing in across apps
+
+  async handoff(to: string, next: string): Promise<string> {
+    await this.me();
+    const { data, error } = await this.sb.functions.invoke<{ data?: { url: string } }>('account-handoff', { body: { to, next } });
+    if (error || !data?.data?.url) throw new ApiError('server', 'We could not sign you in there.');
+    return data.data.url;
+  }
+
+  async completeHandoff(tokenHash: string): Promise<Session> {
+    const { data, error } = await this.sb.auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
+    if (error || !data.session) throw new ApiError('unauthorized', 'That sign-in link has expired or was already used. Sign in again.');
+    return this.sessionFor(data.session);
+  }
+
+  // ----------------------------------------------------------- notifications
+
+  /** Notifications from every ELUM service (the platform's elum.notifications). */
+  readonly notifications: NotificationsApi = {
+    list: async ({ before, unreadOnly = false, limit = 30 } = {}) => {
+      await this.me();
+      const rows = await this.rpc<NotificationRow[]>('elum_notifications', { p_limit: limit, p_before: before ?? null, p_unread_only: unreadOnly });
+      return (rows ?? []).map(toNotification);
+    },
+    markRead: async (ids) => {
+      await this.me();
+      await this.rpc('elum_mark_notifications_read', { p_ids: ids ?? null });
+    },
+    subscribe: (onNew) => {
+      let channel: ReturnType<SupabaseClient['channel']> | null = null;
+      let stopped = false;
+      void this.sb.auth.getSession().then(({ data }) => {
+        const me = data.session?.user.id;
+        if (!me || stopped) return;
+        channel = this.sb
+          .channel(`elum-notifications-${me}`)
+          .on('postgres_changes', { event: 'INSERT', schema: 'elum', table: 'notifications', filter: `account_id=eq.${me}` }, (change) => {
+            const row = change.new as Record<string, unknown>;
+            onNew(
+              toNotification({
+                id: String(row.id),
+                service_id: String(row.service_id),
+                type: String(row.type),
+                title: String(row.title),
+                body: (row.body as string | null) ?? null,
+                link: (row.link as string | null) ?? null,
+                created_at: String(row.created_at),
+                read_at: null,
+                actor: null,
+              }),
+            );
+          })
+          .subscribe();
+      });
+      return () => {
+        stopped = true;
+        if (channel) void this.sb.removeChannel(channel);
+      };
+    },
+  };
+
+  // ----------------------------------------------------------------- designs
 
   async listDesigns(): Promise<DesignSummary[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('list_user_designs', { user_id_param: user.id });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(d => this.toSummary(d));
+    await this.me();
+    return (await this.rpc<DesignSummary[]>('make_list')) ?? [];
   }
 
   async createDesign(input: NewDesignInput = {}): Promise<DesignSummary> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .from('designs')
-      .insert({
-        id: crypto.randomUUID(),
-        owner_id: user.id,
-        title: input.title || 'Untitled design',
-        kind: input.kind ?? 'presentation',
-        width: input.width ?? 1920,
-        height: input.height ?? 1080,
-        content: input.content ?? { pages: [] },
-        tags: input.tags ?? [],
-      })
-      .select()
-      .single();
-    if (error) throw new ApiError('server', error.message);
-    return this.toSummary(data);
+    await this.me();
+    return this.rpc<DesignSummary>('make_create', {
+      p_title: cleanTitle(input.title),
+      p_kind: input.kind ?? 'presentation',
+      p_width: input.width ?? 1920,
+      p_height: input.height ?? 1080,
+      p_content: input.content ?? { pages: [] },
+    });
   }
 
   async getDesign(id: string): Promise<Design> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .from('designs')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error || !data) throw new ApiError('not_found', 'Design not found.');
-    return this.toDesign(data);
+    await this.me();
+    return this.rpc<Design>('make_get', { p_id: id });
   }
 
   async saveDesign(id: string, version: number, content: DesignContent, title?: string): Promise<SaveResult> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { error } = await this.supabase
-      .from('designs')
-      .update({
-        content,
-        title: title,
-        version: version + 1,
-        updated_at: new Date().toISOString(),
-        updated_by: user.id,
-      })
-      .eq('id', id)
-      .eq('version', version);
-    if (error) {
-      if (error.code === '23505') {
-        throw new ApiError('conflict', 'Someone else changed this design.');
-      }
-      throw new ApiError('server', error.message);
-    }
-    const { data } = await this.supabase
-      .from('designs')
-      .select('version, updated_at')
-      .eq('id', id)
-      .single();
-    if (!data) throw new ApiError('server', 'Could not retrieve updated design.');
-    return { version: data.version, updatedAt: data.updated_at };
+    return this.rpc<SaveResult>('make_save', { p_id: id, p_version: version, p_content: content, p_title: title ?? null }, 'Your changes could not be saved. They are kept here; trying again.');
   }
-
-  async renameDesign(id: string, title: string): Promise<void> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { error } = await this.supabase
-      .from('designs')
-      .update({ title, updated_at: new Date().toISOString(), updated_by: user.id })
-      .eq('id', id);
-    if (error) throw new ApiError('server', error.message);
-  }
-
-  async resizeDesign(id: string, width: number, height: number): Promise<void> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { error } = await this.supabase
-      .from('designs')
-      .update({ width, height, updated_at: new Date().toISOString(), updated_by: user.id })
-      .eq('id', id);
-    if (error) throw new ApiError('server', error.message);
-  }
-
-  async duplicateDesign(id: string): Promise<DesignSummary> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data: original } = await this.supabase
-      .from('designs')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (!original) throw new ApiError('not_found', 'Design not found.');
-    const { data, error } = await this.supabase
-      .from('designs')
-      .insert({
-        id: crypto.randomUUID(),
-        owner_id: user.id,
-        title: `Copy of ${original.title}`,
-        kind: original.kind,
-        width: original.width,
-        height: original.height,
-        content: original.content,
-        tags: original.tags,
-      })
-      .select()
-      .single();
-    if (error) throw new ApiError('server', error.message);
-    return this.toSummary(data);
-  }
-
-  async deleteDesign(id: string): Promise<void> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { error } = await this.supabase
-      .from('designs')
-      .delete()
-      .eq('id', id)
-      .eq('owner_id', user.id);
-    if (error) throw new ApiError('server', error.message);
-  }
-
-  // --- sharing ---
-
-  async listShares(id: string): Promise<Share[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('get_design_shares', { design_id_param: id });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(s => ({
-      id: s.user_id,
-      name: s.user_name,
-      email: s.user_email,
-      color: s.user_color,
-      accountType: s.user_account_type as 'external' | 'google' | 'github',
-      role: s.role as ShareRole,
-    }));
-  }
-
-  async share(id: string, email: string, role: ShareRole): Promise<Share> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('share_design', { design_id_param: id, email_param: email, role_param: role });
-    if (error) throw new ApiError('server', error.message);
-    return {
-      id: data.user_id,
-      name: data.user_name,
-      email: data.user_email,
-      color: data.user_color,
-      accountType: data.user_account_type as 'external' | 'google' | 'github',
-      role,
-    };
-  }
-
-  async unshare(id: string, userId: string): Promise<void> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { error } = await this.supabase
-      .from('shares')
-      .delete()
-      .eq('design_id', id)
-      .eq('user_id', userId);
-    if (error) throw new ApiError('server', error.message);
-  }
-
-  async findPeople(query: string): Promise<PublicUser[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('search_users', { query_param: query });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(u => this.toPublicUser(u));
-  }
-
-  // --- pictures ---
-
-  async uploadImage(designId: string, file: File): Promise<string> {
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      throw new ApiError('invalid', 'Use a PNG, JPEG, WebP, GIF or SVG picture.');
-    }
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const ext = file.name.split('.').pop() ?? 'png';
-    const path = `${designId}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await this.supabase.storage
-      .from('design-images')
-      .upload(path, file);
-    if (error) throw new ApiError('server', error.message);
-    return `storage:${path}`;
-  }
-
-  async imageUrl(src: string): Promise<string> {
-    if (!src.startsWith('storage:')) return src;
-    const path = src.slice(8);
-    const { data } = this.supabase.storage
-      .from('design-images')
-      .getPublicUrl(path);
-    return data.publicUrl;
-  }
-
-  // --- version history ---
 
   async versionHistory(designId: string): Promise<DesignVersion[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('get_design_versions', { design_id_param: designId });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(v => ({
-      version: v.version,
-      title: v.title,
-      savedBy: v.saved_by_id ? this.toUser({
-        id: v.saved_by_id,
-        name: v.saved_by_name,
-        email: v.saved_by_email,
-        color: v.saved_by_color,
-        accountType: 'external',
-        createdAt: '',
-      }) : null,
-      savedAt: v.saved_at,
-      preview: v.preview,
-    }));
+    return (await this.rpc<DesignVersion[]>('make_versions', { p_id: designId })) ?? [];
   }
 
   async restoreVersion(designId: string, version: number): Promise<SaveResult> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    // Get the version content
-    const { data: design } = await this.supabase
-      .from('designs')
-      .select('content, version')
-      .eq('id', designId)
-      .single();
-    if (!design) throw new ApiError('not_found', 'Design not found.');
-    // Create a new version entry
-    const { error } = await this.supabase
-      .from('design_versions')
-      .insert({
-        design_id: designId,
-        version: design.version + 1,
-        saved_by: user.id,
-        saved_at: new Date().toISOString(),
-      });
-    if (error) throw new ApiError('server', error.message);
-    return { version: design.version + 1, updatedAt: new Date().toISOString() };
+    return this.rpc<SaveResult>('make_restore_version', { p_id: designId, p_version: version });
   }
 
-  // --- comments ---
-
   async comments(designId: string): Promise<Comment[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('get_design_comments', { design_id_param: designId });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(c => ({
-      id: c.id,
-      body: c.body,
-      position: c.position,
-      resolved: c.resolved,
-      user: this.toUser({
-        id: c.user_id,
-        name: c.user_name,
-        email: c.user_email,
-        color: c.user_color,
-        accountType: 'external',
-        createdAt: '',
-      }),
-      createdAt: c.created_at,
-      updatedAt: c.updated_at,
-      replies: (c.replies || []).map((r: any) => ({
-        id: r.id,
-        body: r.body,
-        position: null,
-        resolved: false,
-        user: this.toUser({
-          id: r.user_id,
-          name: r.user_name,
-          email: r.user_email,
-          color: r.user_color,
-          accountType: 'external',
-          createdAt: '',
-        }),
-        createdAt: r.created_at,
-        updatedAt: r.created_at,
-        replies: [],
-      })),
-    }));
+    return (await this.rpc<Comment[]>('make_comments', { p_id: designId })) ?? [];
   }
 
   async addComment(designId: string, body: string, parentId?: string, position?: { page: number; x: number; y: number }): Promise<Comment> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .from('comments')
-      .insert({
-        design_id: designId,
-        user_id: user.id,
-        body,
-        parent_id: parentId || null,
-        position,
-      })
-      .select()
-      .single();
-    if (error) throw new ApiError('server', error.message);
-    return {
-      id: data.id,
-      body: data.body,
-      position: data.position,
-      resolved: data.resolved,
-      user: this.toUser({
-        id: data.user_id,
-        name: data.user_name,
-        email: data.user_email,
-        color: data.user_color,
-        accountType: 'external',
-        createdAt: '',
-      }),
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      replies: [],
-    };
+    return this.rpc<Comment>('make_add_comment', {
+      p_id: designId,
+      p_body: body,
+      p_parent: parentId ?? null,
+      p_page: position?.page ?? null,
+      p_x: position?.x ?? null,
+      p_y: position?.y ?? null,
+    });
   }
 
   async resolveComment(commentId: string, resolved: boolean): Promise<void> {
-    const { error } = await this.supabase
-      .from('comments')
-      .update({ resolved, updated_at: new Date().toISOString() })
-      .eq('id', commentId);
-    if (error) throw new ApiError('server', error.message);
+    await this.rpc('make_resolve_comment', { p_comment: commentId, p_resolved: resolved });
   }
-
-  // --- annotations ---
-
-  async annotations(designId: string): Promise<Annotation[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('get_design_annotations', { design_id_param: designId });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(a => ({
-      id: a.id,
-      pageNumber: a.page_number,
-      x: a.x,
-      y: a.y,
-      body: a.body,
-      resolved: a.resolved,
-      user: this.toUser({
-        id: a.user_id,
-        name: a.user_name,
-        email: a.user_email,
-        color: a.user_color,
-        accountType: 'external',
-        createdAt: '',
-      }),
-      createdAt: a.created_at,
-      updatedAt: a.updated_at,
-    }));
-  }
-
-  async addAnnotation(designId: string, pageNumber: number, x: number, y: number, body: string): Promise<Annotation> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .from('annotations')
-      .insert({
-        design_id: designId,
-        user_id: user.id,
-        page_number: pageNumber,
-        x,
-        y,
-        body,
-      })
-      .select()
-      .single();
-    if (error) throw new ApiError('server', error.message);
-    return {
-      id: data.id,
-      pageNumber: data.page_number,
-      x: data.x,
-      y: data.y,
-      body: data.body,
-      resolved: data.resolved,
-      user: this.toUser({
-        id: data.user_id,
-        name: data.user_name,
-        email: data.user_email,
-        color: data.user_color,
-        accountType: 'external',
-        createdAt: '',
-      }),
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
-  }
-
-  // --- brand kits ---
 
   async brandKits(): Promise<BrandKit[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('get_user_brand_kits', { user_id_param: user.id });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(bk => ({
-      id: bk.id,
-      name: bk.name,
-      description: bk.description,
-      assets: bk.assets,
-      isPublic: bk.is_public,
-      updatedAt: bk.updated_at,
-      owner: bk.owner_id ? this.toUser({
-        id: bk.owner_id,
-        name: bk.owner_name,
-        email: bk.owner_email,
-        color: '',
-        accountType: 'external',
-        createdAt: '',
-      }) : null,
-    }));
-  }
-
-  async saveBrandKit(id: string | null, name: string, description: string, assets: { colors: BrandKitAsset[]; fonts: BrandKitAsset[]; logo?: string }): Promise<BrandKit> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    let data: any;
-    let error: any;
-    if (id) {
-      ({ data, error } = await this.supabase
-        .from('brand_kits')
-        .update({ name, description, assets, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single());
-    } else {
-      ({ data, error } = await this.supabase
-        .from('brand_kits')
-        .insert({ name, description, assets, user_id: user.id })
-        .select()
-        .single());
-    }
-    if (error) throw new ApiError('server', error.message);
-    return {
-      id: data.id,
-      name: data.name,
-      description: data.description,
-      assets: data.assets,
-      isPublic: data.is_public,
-      updatedAt: data.updated_at,
-      owner: this.toUser({
-        id: data.user_id,
-        name: data.user_name,
-        email: data.user_email,
-        color: '',
-        accountType: 'external',
-        createdAt: '',
-      }),
-    };
+    return (await this.rpc<BrandKit[]>('make_brand_kits')) ?? [];
   }
 
   async getBrandKit(id: string): Promise<BrandKit> {
-    const { data, error } = await this.supabase
-      .from('brand_kits')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error || !data) throw new ApiError('not_found', 'Brand kit not found.');
-    return {
-      id: data.id,
-      name: data.name,
-      description: data.description,
-      assets: data.assets,
-      isPublic: data.is_public,
-      updatedAt: data.updated_at,
-      owner: data.user_id ? this.toUser({
-        id: data.user_id,
-        name: data.user_name,
-        email: data.user_email,
-        color: '',
-        accountType: 'external',
-        createdAt: '',
-      }) : null,
-    };
+    return this.rpc<BrandKit>('make_brand_kit', { p_kit: id });
   }
 
-  // --- templates ---
+  async saveBrandKit(id: string | null, name: string, description: string, assets: { colors: BrandKitAsset[]; fonts: BrandKitAsset[]; logo?: string }): Promise<BrandKit> {
+    return this.rpc<BrandKit>('make_save_brand_kit', {
+      p_kit: id,
+      p_name: name,
+      p_description: description || null,
+      p_colors: assets.colors,
+      p_fonts: assets.fonts,
+      p_logo: assets.logo ?? null,
+    });
+  }
 
   async templates(category?: string): Promise<DesignTemplate[]> {
-    const { data, error } = await this.supabase
-      .rpc('get_public_templates', { category_param: category ?? '' });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(t => ({
-      id: t.id,
-      title: t.title,
-      description: t.description,
-      category: t.category,
-      kind: t.kind,
-      width: t.width,
-      height: t.height,
-      thumbnail: t.thumbnail,
-      isPublic: t.is_public,
-      updatedAt: t.updated_at,
-      owner: t.owner_id ? this.toUser({
-        id: t.owner_id,
-        name: t.owner_name,
-        email: t.owner_email,
-        color: '',
-        accountType: 'external',
-        createdAt: '',
-      }) : null,
-    }));
+    return (await this.rpc<DesignTemplate[]>('make_templates', { p_category: category ?? null })) ?? [];
   }
 
   async saveAsTemplate(designId: string, title: string, description?: string, category?: string): Promise<DesignTemplate> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('save_as_template', {
-        design_id_param: designId,
-        title_param: title,
-        description_param: description ?? '',
-        category_param: category ?? '',
-        user_id_param: user.id,
-      });
-    if (error) throw new ApiError('server', error.message);
-    const { data: template } = await this.supabase
-      .from('design_templates')
-      .select('*')
-      .eq('id', data)
-      .single();
-    if (!template) throw new ApiError('server', 'Could not retrieve template.');
-    return {
-      id: template.id,
-      title: template.title,
-      description: template.description,
-      category: template.category,
-      kind: template.kind,
-      width: template.width,
-      height: template.height,
-      thumbnail: template.thumbnail,
-      isPublic: template.is_public,
-      updatedAt: template.updated_at,
-      owner: template.user_id ? this.toUser({
-        id: template.user_id,
-        name: template.user_name,
-        email: template.user_email,
-        color: '',
-        accountType: 'external',
-        createdAt: '',
-      }) : null,
-    };
+    return this.rpc<DesignTemplate>('make_save_as_template', { p_id: designId, p_title: title, p_description: description ?? null, p_category: category ?? null });
   }
 
-  // --- search & analytics ---
+  async createFromTemplate(templateId: string): Promise<DesignSummary> {
+    return this.rpc<DesignSummary>('make_create_from_template', { p_template: templateId });
+  }
+
+  async setTags(designId: string, tags: string[]): Promise<void> {
+    await this.rpc('make_set_tags', { p_id: designId, p_tags: tags });
+  }
 
   async tagSearch(tags: string[], kind?: string): Promise<DesignSummary[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('search_designs_by_tags', { tags_param: tags, kind_param: kind ?? '' });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(d => this.toSummary(d));
+    return (await this.rpc<DesignSummary[]>('make_tag_search', { p_tags: tags, p_kind: kind ?? null })) ?? [];
   }
 
   async incrementViews(designId: string): Promise<void> {
-    const { error } = await this.supabase
-      .rpc('increment_view_count', { design_id_param: designId });
-    if (error) throw new ApiError('server', error.message);
+    await this.rpc('make_view', { p_id: designId });
   }
 
-  // --- favorites ---
-
   async favorites(): Promise<Favorite[]> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { data, error } = await this.supabase
-      .rpc('get_user_favorites', { user_id_param: user.id });
-    if (error) throw new ApiError('server', error.message);
-    return (data || []).map(f => ({
-      id: f.id,
-      designId: f.design_id,
-      createdAt: f.created_at,
-    }));
+    return (await this.rpc<Favorite[]>('make_favorites')) ?? [];
   }
 
   async toggleFavorite(designId: string, favorited: boolean): Promise<void> {
-    const { data: { user } } = await this.supabase.auth.getUser();
-    if (!user) throw new ApiError('unauthorized', 'Not signed in.');
-    const { error } = await this.supabase
-      .rpc('toggle_favorite', {
-        user_id_param: user.id,
-        design_id_param: designId,
-        favorited_param: favorited,
-      });
-    if (error) throw new ApiError('server', error.message);
+    await this.rpc('make_favorite', { p_id: designId, p_on: favorited });
   }
 
-  // --- helpers ---
-
-  private toUser(u: any): User {
-    return {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      color: u.color,
-      accountType: u.account_type || 'external',
-      createdAt: u.created_at,
-    };
+  async renameDesign(id: string, title: string): Promise<void> {
+    await this.rpc('make_rename', { p_id: id, p_title: cleanTitle(title) });
   }
 
-  private toPublicUser(u: any): PublicUser {
-    return {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      color: u.color,
-      accountType: u.account_type || 'external',
-    };
+  async resizeDesign(id: string, width: number, height: number): Promise<void> {
+    await this.rpc('make_resize', { p_id: id, p_width: Math.round(width), p_height: Math.round(height) });
   }
 
-  private toSummary(d: any): DesignSummary {
-    return {
-      id: d.id,
-      title: d.title,
-      kind: d.kind,
-      width: d.width,
-      height: d.height,
-      role: d.role,
-      owner: d.owner_id ? this.toUser({
-        id: d.owner_id,
-        name: d.owner_name,
-        email: d.owner_email,
-        color: d.owner_color,
-        accountType: 'external',
-        createdAt: d.created_at,
-      }) : null,
-      createdAt: d.created_at,
-      updatedAt: d.updated_at,
-      pageCount: d.page_count,
-      cover: d.cover,
-      tags: d.tags,
-      viewCount: d.view_count,
-    };
+  async duplicateDesign(id: string): Promise<DesignSummary> {
+    return this.rpc<DesignSummary>('make_duplicate', { p_id: id });
   }
 
-  private toDesign(d: any): Design {
-    const summary = this.toSummary(d);
-    return {
-      ...summary,
-      content: d.content,
-      version: d.version,
-      updatedBy: d.updated_by ? this.toUser({
-        id: d.updated_by,
-        name: d.updated_by_name,
-        email: d.updated_by_email,
-        color: '',
-        accountType: 'external',
-        createdAt: '',
-      }) : null,
-    };
+  async deleteDesign(id: string): Promise<void> {
+    // Supabase only lets pictures leave storage through the Storage API, so an owner removes
+    // them here first; make_delete then deletes the design. Someone the design was shared with
+    // only leaves it, and its pictures stay.
+    const design = await this.rpc<Design>('make_get', { p_id: id });
+    if (design.role === 'owner') await this.removePictures(id);
+    await this.rpc('make_delete', { p_id: id });
   }
+
+  /** Every picture in a design's folder. A picture that will not go is left, never the design. */
+  private async removePictures(designId: string): Promise<void> {
+    const bucket = this.sb.storage.from(BUCKET);
+    for (;;) {
+      const { data, error } = await bucket.list(designId, { limit: 100 });
+      if (error || !data?.length) return;
+      const { error: removeError } = await bucket.remove(data.map((f) => `${designId}/${f.name}`));
+      if (removeError || data.length < 100) return;
+    }
+  }
+
+  // ----------------------------------------------------------------- sharing
+
+  async listShares(id: string): Promise<Share[]> {
+    return (await this.rpc<Share[]>('make_shares', { p_id: id })) ?? [];
+  }
+
+  async share(id: string, email: string, role: ShareRole): Promise<Share> {
+    if (!isEmail(email)) throw new ApiError('invalid', 'Enter an email address.', { field: 'email' });
+    return this.rpc<Share>('make_share', { p_id: id, p_email: email.trim().toLowerCase(), p_role: role });
+  }
+
+  async unshare(id: string, userId: string): Promise<void> {
+    await this.rpc('make_unshare', { p_id: id, p_user: userId });
+  }
+
+  async findPeople(query: string): Promise<PublicUser[]> {
+    if (query.trim().length < 2) return [];
+    return (await this.rpc<PublicUser[]>('make_find_people', { p_query: query })) ?? [];
+  }
+
+  // ---------------------------------------------------------------- pictures
+
+  async uploadImage(designId: string, file: File): Promise<string> {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) throw new ApiError('invalid', 'Use a PNG, JPEG, WebP, GIF or SVG picture.');
+    if (file.size > MAX_IMAGE_BYTES) throw new ApiError('too_large', 'Pictures can be up to 15 MB.');
+    await this.me();
+    const ext = (file.name.split('.').pop() ?? 'png').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'png';
+    const path = `${designId}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await this.sb.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+    if (error) throw toApiError(error as RawError, 'That picture could not be uploaded.');
+    return `${STORAGE_PREFIX}${path}`;
+  }
+
+  async imageUrl(src: string): Promise<string> {
+    if (!src.startsWith(STORAGE_PREFIX)) return src;
+    const path = src.slice(STORAGE_PREFIX.length);
+    const cached = this.signedUrls.get(path);
+    if (cached && cached.expires > Date.now() + 60_000) return cached.url;
+    const { data, error } = await this.sb.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_SECONDS);
+    if (error || !data) throw toApiError(error as RawError, 'That picture could not be loaded.');
+    this.signedUrls.set(path, { url: data.signedUrl, expires: Date.now() + SIGNED_URL_SECONDS * 1000 });
+    return data.signedUrl;
+  }
+}
+
+interface NotificationRow {
+  id: string;
+  service_id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  created_at: string;
+  read_at: string | null;
+  actor: { id: string; name: string; color: string } | null;
+}
+
+function toNotification(r: NotificationRow): AppNotification {
+  return {
+    id: r.id,
+    service: r.service_id as AppNotification['service'],
+    type: r.type,
+    title: r.title,
+    body: r.body,
+    link: r.link,
+    createdAt: r.created_at,
+    readAt: r.read_at,
+    actor: r.actor,
+  };
+}
+
+function toUser(p: ProfileRow): User {
+  return { id: p.id, name: p.name, email: p.email, color: p.color, accountType: p.account_type ?? 'external', createdAt: p.created_at };
 }

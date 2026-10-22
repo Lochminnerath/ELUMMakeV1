@@ -85,9 +85,6 @@ interface BaseElement {
   hidden?: boolean;
   name?: string;
 }
-  hidden?: boolean;
-  locked?: boolean;
-  rotation?: number;
 
 export interface TextElement extends BaseElement {
   type: 'text';
@@ -102,9 +99,6 @@ export interface TextElement extends BaseElement {
   lineHeight: number;
   letterSpacing: number;
 }
-  fontFamily: string;
-  italic: boolean;
-  underline: boolean;
 
 export interface ShapeElement extends BaseElement {
   type: 'rect' | 'ellipse' | 'triangle' | 'star';
@@ -147,6 +141,8 @@ export interface DesignSummary {
   pageCount: number;
   /** The first page, for thumbnails. */
   cover: Page | null;
+  /** Only filled in by tag search. */
+  tags?: string[];
 }
 
 export interface Design extends DesignSummary {
@@ -244,7 +240,8 @@ export interface DesignVersion {
   title: string;
   savedBy: PublicUser | null;
   savedAt: string;
-  preview: string | null;
+  /** The first page as it was, for a thumbnail. */
+  preview: Page | null;
 }
 
 /** A saved design template. */
