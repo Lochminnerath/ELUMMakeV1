@@ -12,14 +12,12 @@ import type {
   Annotation,
   NewDesignInput,
   PublicUser,
-  Role,
   SaveResult,
   Session,
   Share,
   ShareRole,
   SignInInput,
   SignUpInput,
-  DesignKind,
   User,
 } from './types';
 
@@ -35,6 +33,21 @@ export interface MakeApi {
   signOut(): Promise<void>;
   updateProfile(input: { name: string }): Promise<User>;
   onUnauthorized(handler: () => void): () => void;
+
+  // Confirming an email. Only on Supabase.
+  resendConfirmation?(email: string): Promise<void>;
+  takeLinkProblem?(): string | null;
+
+  // ELUM Type addresses. Only on Supabase.
+  typeDomain?(): Promise<string>;
+  handleAvailable?(handle: string): Promise<boolean>;
+
+  // Signing in across ELUM apps. Only on Supabase.
+  handoff?(to: string, next: string): Promise<string>;
+  completeHandoff?(tokenHash: string): Promise<Session>;
+
+  /** Notifications from every ELUM service. Only on Supabase. */
+  readonly notifications?: NotificationsApi;
 
   // Designs
   listDesigns(): Promise<DesignSummary[]>;
@@ -79,15 +92,12 @@ export interface MakeApi {
   saveAsTemplate(designId: string, title: string, description?: string, category?: string): Promise<DesignTemplate>;
 
   // Search & analytics
-  tagSearch(tags: string[], kind?: DesignKind): Promise<DesignSummary[]>;
+  tagSearch(tags: string[], kind?: string): Promise<DesignSummary[]>;
   incrementViews(designId: string): Promise<void>;
 
   // Favorites
   favorites(): Promise<Favorite[]>;
   toggleFavorite(designId: string, favorited: boolean): Promise<void>;
-
-  // Notifications (optional, only on Supabase)
-  readonly notifications?: NotificationsApi;
 }
 
 export interface NotificationsApi {
