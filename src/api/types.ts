@@ -1,4 +1,4 @@
-import type { Role } from './errors';
+export type { Role } from './errors';
 
 /** A minimal public profile, returned when searching for people. */
 export interface PublicUser {
