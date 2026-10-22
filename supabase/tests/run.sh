@@ -15,8 +15,8 @@ for test in *.test.sql; do
     psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$migration"
   done
   psql -q -v ON_ERROR_STOP=1 -d "$DB" -f helpers.sql
-  echo "-- $test"
-  psql -q -v ON_ERROR_STOP=1 -d "$DB" -o /dev/null -f "$test"
+  # Set search_path to include 'make' schema so make_* functions are callable without schema prefix
+  psql -q -v ON_ERROR_STOP=1 -d "$DB" -c "SET search_path = make, public;" -f "$test"
   dropdb "$DB"
 done
 echo "All database checks passed."
