@@ -29,6 +29,44 @@ export const APP_NAME = 'Make';
 
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-22-studio',
+    date: '22 October 2026',
+    title: 'Make, grown up',
+    intro: 'History, comments, brand kits and a handful of tools that make Make feel like a proper studio.',
+    features: [
+      {
+        title: 'Every version, kept',
+        text: 'Open History beside the page to look back through earlier versions, see who saved them and when, and put one back. What it replaces stays in the history too.',
+        art: 'layers',
+      },
+      {
+        title: 'Comments and pins',
+        text: 'Talk about a design right where it lives. Reply, resolve when it is sorted, or drop a pin on the exact spot you mean. People who can only view can comment as well.',
+        art: 'share',
+      },
+      {
+        title: 'Your brand, one click away',
+        text: 'Keep your colours, fonts and logo in a brand kit. They show first in every colour and font menu, and Apply kit recolours a page in one go.',
+        art: 'spark',
+      },
+      {
+        title: 'Favourites, tags and your own templates',
+        text: 'Star the designs you keep coming back to, tag them to find them fast, and save any design as a template to start the next one from.',
+        art: 'check',
+      },
+      {
+        title: 'Tools for tidy work',
+        text: 'Group and ungroup, line things up and space them evenly, copy a style onto something else, and nudge by 10 with Shift held.',
+        art: 'layers',
+      },
+      {
+        title: 'Presentations that move',
+        text: 'Pages can fade or slide in, and each element can appear on a click with a fade, slide or scale. Everything stays still for people who prefer less motion.',
+        art: 'devices',
+      },
+    ],
+  },
+  {
     id: '2026-10-19-symbols',
     date: '19 October 2026',
     title: 'Symbols, redrawn',
@@ -140,4 +178,19 @@ export function tourSteps(releases: Release[]): Step[] {
     { key: `${r.id}:intro`, eyebrow: `New in ${APP_NAME} · ${r.date}`, title: r.title, text: r.intro, art: 'mark' as const },
     ...r.features.map((f, i) => ({ key: `${r.id}:${i}`, eyebrow: r.title, title: f.title, text: f.text, art: f.art })),
   ]);
+}
+
+/**
+ * What to show when Make opens, from the release last seen on the account and on this device.
+ * Only releases newer than the newest one seen are shown. Someone with nothing recorded anywhere
+ * (a brand-new visitor) sees nothing; the latest release is recorded for them quietly instead.
+ * `record` is the id to remember on the account (null when it already holds the latest).
+ */
+export function whatsNewPlan(releases: Release[], account: string | null, local: string | null): { show: Release[]; record: string | null } {
+  if (!releases.length) return { show: [], record: null };
+  const latest = releases[0].id;
+  const known = [account, local].map((id) => (id ? releases.findIndex((r) => r.id === id) : -1)).filter((i) => i >= 0);
+  const record = account === latest ? null : latest;
+  if (!known.length) return { show: [], record };
+  return { show: releases.slice(0, Math.min(...known)), record };
 }

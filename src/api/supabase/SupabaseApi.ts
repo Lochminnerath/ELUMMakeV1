@@ -512,6 +512,17 @@ export class SupabaseApi implements MakeApi {
     await this.rpc('make_favorite', { p_id: designId, p_on: favorited });
   }
 
+  async seenRelease(key: string): Promise<string | null> {
+    const { data } = await this.sb.auth.getSession();
+    const value = (data.session?.user.user_metadata as Record<string, unknown> | undefined)?.[key];
+    return typeof value === 'string' && value ? value : null;
+  }
+
+  async rememberSeen(key: string, id: string): Promise<void> {
+    const { error } = await this.sb.auth.updateUser({ data: { [key]: id } });
+    if (error) throw new ApiError('server', 'That could not be remembered on your account.');
+  }
+
   async renameDesign(id: string, title: string): Promise<void> {
     await this.rpc('make_rename', { p_id: id, p_title: cleanTitle(title) });
   }

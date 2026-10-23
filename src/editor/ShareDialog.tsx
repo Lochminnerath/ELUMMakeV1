@@ -63,7 +63,7 @@ export function ShareDialog({ open, onClose, designId, title, role, owner }: { o
         setShares((list) => list?.map((x) => (x.id === s.id ? updated : x)) ?? null);
       }
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'share-failed' });
     }
   };
 

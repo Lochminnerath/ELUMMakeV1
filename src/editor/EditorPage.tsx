@@ -1,11 +1,11 @@
-import { ArrowLeft, ArrowRight, Circle, Image as ImageIcon, Layers, Minus, MoveRight, PanelRight, Redo2, Slash, Square, Star, Triangle, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Circle, History, Image as ImageIcon, Layers, LayoutTemplate, MessageCircle, Minus, MoreHorizontal, MoveRight, Palette, PanelRight, Redo2, SlidersHorizontal, Slash, Square, Star, Triangle, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react';
 import { OfflineIcon, PresentIcon } from '../components/icons/ElumIcons';
 import { DownloadIcon } from '../components/icons/ElumIcons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { api, errorMessage, isApiError, type Design, type DesignContent, type DesignElement, type Page } from '../api';
+import { api, errorMessage, isApiError, type BrandKit, type Comment, type Design, type DesignContent, type DesignElement, type DesignVersion, type Page } from '../api';
 import { DesignIcon } from '../components/Brand';
-import { FullPageLoader } from '../components/Loader';
+import { Loader } from '../components/Loader';
 import { Menu } from '../components/Menu';
 import { NotificationBell } from '../components/NotificationBell';
 import { useToast } from '../components/Toast';
@@ -16,7 +16,12 @@ import { exportPdf, exportPng, safeFilename } from './export';
 import { useHistory } from './history';
 import { Inspector, type Align, type Arrange } from './Inspector';
 import { LayersPanel } from './LayersPanel';
-import { bounds, cloneElement, clonePage, newImage, newLine, newPage, newShape, newText, normalizeContent, unionBox } from './model';
+import { alignElements, applyKitToPage, cloneElement, clonePage, copyStyle, distributeElements, expandGroups, groupElements, isOneGroup, newImage, newLine, newPage, newShape, newText, normalizeContent, pasteStyle, ungroupElements, type Style } from './model';
+import { BrandPanel } from './BrandPanel';
+import { CommentsPanel, numberPins, type PinSpot } from './CommentsPanel';
+import { HistoryPanel } from './HistoryPanel';
+import { KitContext, rememberedKit, rememberKit, toActiveKit } from './kit';
+import { SaveTemplateDialog } from './SaveTemplateDialog';
 import { PagesStrip } from './PagesStrip';
 import { Present } from './Present';
 import { ShareDialog } from './ShareDialog';
@@ -24,10 +29,20 @@ import { ShareIcon } from '../components/ShareIcon';
 import './editor.css';
 import { ElumLauncher } from '../components/ElumLauncher';
 import { useFavicon } from '../lib/favicon';
+import { SupportLinks } from '../components/SupportLink';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'offline';
 const SAVE_DELAY = 900;
 const ICON = { size: 18, strokeWidth: 1.75 };
+
+type PanelId = 'design' | 'layers' | 'comments' | 'history' | 'brand';
+const PANELS: { id: PanelId; label: string; icon: typeof Layers }[] = [
+  { id: 'design', label: 'Edit', icon: SlidersHorizontal },
+  { id: 'layers', label: 'Layers', icon: Layers },
+  { id: 'comments', label: 'Comments', icon: MessageCircle },
+  { id: 'history', label: 'History', icon: History },
+  { id: 'brand', label: 'Brand', icon: Palette },
+];
 
 export default function EditorPage() {
   const { designId = '' } = useParams();
@@ -57,10 +72,11 @@ export default function EditorPage() {
         <Link to="/" className="elum-btn elum-btn--primary">
           Go to your designs
         </Link>
+        <SupportLinks app="make" code="open-failed" message={error} />
       </div>
     );
   }
-  if (!design) return <FullPageLoader label="Opening your design" />;
+  if (!design) return <EditorSkeleton />;
   return <Editor key={design.id} initial={design} />;
 }
 
@@ -74,7 +90,10 @@ function Editor({ initial }: { initial: Design }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [selection, setSelection] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [panel, setPanel] = useState<'design' | 'layers'>('design');
+  const [panel, setPanel] = useState<PanelId>(() => {
+    const asked = new URLSearchParams(window.location.search).get('panel');
+    return PANELS.some((p) => p.id === asked) ? (asked as PanelId) : 'design';
+  });
   const [panelOpen, setPanelOpen] = useState(false);
   const [zoomMode, setZoomMode] = useState<'fit' | number>('fit');
   const [fitZoom, setFitZoom] = useState(0.4);
@@ -82,6 +101,17 @@ function Editor({ initial }: { initial: Design }) {
   const [sharing, setSharing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [exporting, setExporting] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [currentVersion, setCurrentVersion] = useState(initial.version);
+  const [comments, setComments] = useState<Comment[] | null>(null);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+  const [pinMode, setPinMode] = useState(false);
+  const [pendingPin, setPendingPin] = useState<PinSpot | null>(null);
+  const [openComment, setOpenComment] = useState<string | null>(null);
+  const [kits, setKits] = useState<BrandKit[] | null>(null);
+  const [kitsError, setKitsError] = useState<string | null>(null);
+  const [kitId, setKitId] = useState<string | null>(rememberedKit);
+  const [styleClip, setStyleClip] = useState<Style | null>(null);
   const readOnly = initial.role === 'viewer';
   const areaRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -93,6 +123,56 @@ function Editor({ initial }: { initial: Design }) {
   const page = content.pages[Math.min(pageIndex, content.pages.length - 1)];
   const zoom = zoomMode === 'fit' ? fitZoom : zoomMode;
   const selected = useMemo(() => page.elements.filter((el) => selection.includes(el.id)), [page, selection]);
+
+  /** Selecting part of a group selects the whole group; letting go of part lets go of all of it. */
+  const select = (ids: string[]) => {
+    const removed = new Set(page.elements.filter((el) => selection.includes(el.id) && !ids.includes(el.id) && el.groupId).map((el) => el.groupId));
+    const kept = ids.filter((id) => {
+      const el = page.elements.find((x) => x.id === id);
+      return !el?.groupId || !removed.has(el.groupId);
+    });
+    setSelection(expandGroups(page.elements, kept));
+  };
+  const grouped = isOneGroup(page.elements, selection);
+
+  // ------------------------------------------------------------------ comments, kits
+
+  const loadComments = useCallback(async () => {
+    try {
+      setComments(await api.comments(initial.id));
+      setCommentsError(null);
+    } catch (e) {
+      setCommentsError(errorMessage(e));
+    }
+  }, [initial.id]);
+  useEffect(() => {
+    void loadComments();
+    // Others' comments arrive while the panel is open.
+    if (panel !== 'comments') return;
+    const t = window.setInterval(() => void loadComments(), 30_000);
+    return () => window.clearInterval(t);
+  }, [loadComments, panel]);
+
+  const loadKits = useCallback(async () => {
+    try {
+      setKits(await api.brandKits());
+      setKitsError(null);
+    } catch (e) {
+      setKits([]);
+      setKitsError(errorMessage(e));
+    }
+  }, []);
+  useEffect(() => {
+    void loadKits();
+  }, [loadKits]);
+  const kit = useMemo(() => {
+    const k = kits?.find((x) => x.id === kitId);
+    return k ? toActiveKit(k) : null;
+  }, [kits, kitId]);
+  const pickKit = (id: string | null) => {
+    setKitId(id);
+    rememberKit(id);
+  };
 
   // Keep the page index and selection valid as pages and elements change (undo, deletes).
   useEffect(() => {
@@ -197,7 +277,7 @@ function Editor({ initial }: { initial: Design }) {
       await api.renameDesign(initial.id, next);
       initial.title = next;
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
     }
   };
 
@@ -259,38 +339,109 @@ function Editor({ initial }: { initial: Design }) {
       return { ...p, elements: els };
     });
 
-  const align = (how: Align) => {
-    const target = selected.length > 1 ? unionBox(selected.map(bounds))! : { x: 0, y: 0, w: size.width, h: size.height };
-    changeElements(
-      selected.filter((el) => !el.locked).map((el) => el.id),
-      (el) => {
-        const b = bounds(el);
-        const dx = how === 'left' ? target.x - b.x : how === 'right' ? target.x + target.w - (b.x + b.w) : how === 'hcenter' ? target.x + target.w / 2 - (b.x + b.w / 2) : 0;
-        const dy = how === 'top' ? target.y - b.y : how === 'bottom' ? target.y + target.h - (b.y + b.h) : how === 'vcenter' ? target.y + target.h / 2 - (b.y + b.h / 2) : 0;
-        return { ...el, x: Math.round(el.x + dx), y: Math.round(el.y + dy) };
-      },
-    );
+  const replaceSelected = (next: DesignElement[]) => {
+    const byId = new Map(next.map((el) => [el.id, el]));
+    changePage((p) => ({ ...p, elements: p.elements.map((el) => byId.get(el.id) ?? el) }));
   };
+  const align = (how: Align) => replaceSelected(alignElements(selected, how, size));
+  const distribute = (axis: 'x' | 'y') => replaceSelected(distributeElements(selected, axis));
 
-  const distribute = (axis: 'x' | 'y') => {
-    const items = selected.filter((el) => !el.locked).map((el) => ({ el, b: bounds(el) }));
-    if (items.length < 3) return;
-    items.sort((a, b) => (axis === 'x' ? a.b.x - b.b.x : a.b.y - b.b.y));
-    const first = items[0].b;
-    const last = items[items.length - 1].b;
-    const total = items.reduce((s, i) => s + (axis === 'x' ? i.b.w : i.b.h), 0);
-    const span = axis === 'x' ? last.x + last.w - first.x : last.y + last.h - first.y;
-    const gap = (span - total) / (items.length - 1);
-    let at = axis === 'x' ? first.x : first.y;
-    const moves = new Map<string, number>();
-    for (const i of items) {
-      moves.set(i.el.id, at - (axis === 'x' ? i.b.x : i.b.y));
-      at += (axis === 'x' ? i.b.w : i.b.h) + gap;
-    }
-    changeElements([...moves.keys()], (el) => (axis === 'x' ? { ...el, x: Math.round(el.x + moves.get(el.id)!) } : { ...el, y: Math.round(el.y + moves.get(el.id)!) }));
+  const group = () => {
+    if (readOnly || selection.length < 2) return;
+    changePage((p) => groupElements(p, selection));
+  };
+  const ungroup = () => {
+    if (readOnly) return;
+    changePage((p) => ungroupElements(p, selection));
+  };
+  const takeStyle = () => {
+    if (!selected[0]) return;
+    setStyleClip(copyStyle(selected[0]));
+    toast('Style copied. Select something and paste it on.');
+  };
+  const putStyle = () => {
+    if (!styleClip || readOnly || !selected.length) return;
+    changeElements(selection, (el) => (el.locked ? el : pasteStyle(el, styleClip)));
+  };
+  const applyKit = () => {
+    if (!kit || readOnly) return;
+    changePage((p) => applyKitToPage(p, kit));
+    toast(`${kit.name} applied to this page. Undo puts it back.`, { action: { label: 'Undo', onClick: () => historyRef.current.undo() } });
   };
 
   const nudge = (dx: number, dy: number) => changeElements(selected.filter((el) => !el.locked).map((el) => el.id), (el) => ({ ...el, x: el.x + dx, y: el.y + dy }));
+
+  // ------------------------------------------------------------------ restoring a version
+
+  const restoreVersion = async (v: DesignVersion) => {
+    // Keep what is on screen first, so it is the version restoring replaces.
+    await save();
+    const before = version.current;
+    try {
+      await api.restoreVersion(initial.id, v.version);
+      await reload();
+      toast('That version is back. What you had is kept in the history.', {
+        tone: 'success',
+        duration: 8000,
+        action: {
+          label: 'Undo',
+          onClick: () =>
+            void api
+              .restoreVersion(initial.id, before)
+              .then(reload)
+              .catch((e) => toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' })),
+        },
+      });
+    } catch (e) {
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
+      throw e;
+    }
+  };
+
+  const reload = async () => {
+    const latest = await api.getDesign(initial.id);
+    const fresh = normalizeContent(latest.content);
+    version.current = latest.version;
+    savedContent.current = fresh;
+    history.reset(fresh);
+    setCurrentVersion(latest.version);
+    setSize({ width: latest.width, height: latest.height });
+    setTitle(latest.title);
+    setSelection([]);
+    setSaveState('saved');
+  };
+
+  // ------------------------------------------------------------------ comments
+
+  const addComment = async (body: string, parentId?: string, position?: PinSpot) => {
+    const made = await api.addComment(initial.id, body, parentId, position);
+    if (position) {
+      setPendingPin(null);
+      setOpenComment(made.id);
+    }
+    await loadComments();
+  };
+  const resolveComment = async (id: string, resolved: boolean) => {
+    try {
+      await api.resolveComment(id, resolved);
+      setComments((list) => list?.map((c) => (c.id === id ? { ...c, resolved } : c)) ?? null);
+      if (resolved) toast('Resolved. You will find it under Resolved.', { action: { label: 'Reopen', onClick: () => void resolveComment(id, false) } });
+    } catch (e) {
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
+    }
+  };
+  const pinNumbers = useMemo(() => numberPins(comments ?? []), [comments]);
+  const pins = useMemo(() => {
+    const list = (comments ?? [])
+      .filter((c) => c.position && c.position.page === pageIndex && (!c.resolved || c.id === openComment))
+      .map((c) => ({ id: c.id, n: pinNumbers.get(c.id) ?? '', x: c.position!.x, y: c.position!.y, resolved: c.resolved, active: c.id === openComment }));
+    if (pendingPin && pendingPin.page === pageIndex) list.push({ id: 'pending', n: '+', x: pendingPin.x, y: pendingPin.y, resolved: false, active: true, pending: true } as (typeof list)[number]);
+    return list;
+  }, [comments, pageIndex, openComment, pendingPin, pinNumbers]);
+  const openPanel = (id: PanelId) => {
+    setPanel(id);
+    if (narrow) setPanelOpen(true);
+  };
 
   // ------------------------------------------------------------------ pages
 
@@ -327,7 +478,7 @@ function Editor({ initial }: { initial: Design }) {
       setSize({ width, height });
       setZoomMode('fit');
     } catch (e) {
-      toast(errorMessage(e), { tone: 'error' });
+      toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
     }
   };
 
@@ -362,7 +513,7 @@ function Editor({ initial }: { initial: Design }) {
         }
         add(el);
       } catch (e) {
-        toast(errorMessage(e), { tone: 'error' });
+        toast(errorMessage(e), { tone: 'error', cause: e, code: 'design-failed' });
       }
     }
   };
@@ -403,6 +554,16 @@ function Editor({ initial }: { initial: Design }) {
       } else if (mod && k === 'a') {
         e.preventDefault();
         setSelection(page.elements.filter((el) => !el.locked && !el.hidden).map((el) => el.id));
+      } else if (mod && k === 'g') {
+        e.preventDefault();
+        if (e.shiftKey) ungroup();
+        else group();
+      } else if (mod && e.altKey && k === 'c') {
+        e.preventDefault();
+        takeStyle();
+      } else if (mod && e.altKey && k === 'v') {
+        e.preventDefault();
+        putStyle();
       } else if (mod && k === 'c') {
         if (selected.length) clipboard.current = selected.map((el) => structuredClone(el));
       } else if (mod && k === 'x') {
@@ -422,7 +583,10 @@ function Editor({ initial }: { initial: Design }) {
           remove();
         }
       } else if (k === 'escape') {
-        setSelection([]);
+        if (pinMode || pendingPin) {
+          setPinMode(false);
+          setPendingPin(null);
+        } else setSelection([]);
       } else if (k === 'enter' && selected.length === 1 && selected[0].type === 'text' && !readOnly) {
         e.preventDefault();
         setEditingId(selected[0].id);
@@ -519,15 +683,71 @@ function Editor({ initial }: { initial: Design }) {
 
   const side = (
     <aside className="editor__side" data-open={panelOpen || undefined} aria-label="Design panel">
-      <div className="segmented editor__tabs" role="group" aria-label="Panel">
-        <button type="button" aria-pressed={panel === 'design'} onClick={() => setPanel('design')}>
-          {selected.length ? 'Edit' : 'Page'}
-        </button>
-        <button type="button" aria-pressed={panel === 'layers'} onClick={() => setPanel('layers')}>
-          <Layers size={14} strokeWidth={1.75} /> Layers
-        </button>
+      <div className="editor__tabs" role="tablist" aria-label="Panel">
+        {PANELS.map(({ id, label, icon: Icon }) => {
+          const count = id === 'comments' ? (comments ?? []).filter((c) => !c.resolved).length : 0;
+          return (
+            <button key={id} type="button" role="tab" className="editor__tab" aria-selected={panel === id} data-tip={id === 'design' && !selected.length ? 'Page' : label} onClick={() => setPanel(id)}>
+              <Icon size={17} strokeWidth={1.75} />
+              <span className="editor__tab-label">{id === 'design' && !selected.length ? 'Page' : label}</span>
+              {count > 0 && <span className="editor__tab-count">{count}</span>}
+            </button>
+          );
+        })}
       </div>
-      {panel === 'design' ? (
+      <div className="editor__panel" key={panel}>
+      {panel === 'comments' ? (
+        <CommentsPanel
+          comments={comments}
+          error={commentsError}
+          pinMode={pinMode}
+          pendingPin={pendingPin}
+          openId={openComment}
+          onPinMode={(on) => {
+            setPinMode(on);
+            if (on && narrow) setPanelOpen(false);
+          }}
+          onCancelPin={() => setPendingPin(null)}
+          onOpen={(id) => {
+            setOpenComment(id);
+            const c = comments?.find((x) => x.id === id);
+            if (c?.position && c.position.page !== pageIndex && c.position.page < content.pages.length) setPageIndex(c.position.page);
+          }}
+          onAdd={addComment}
+          onResolve={resolveComment}
+          onRetry={() => void loadComments()}
+        />
+      ) : panel === 'history' ? (
+        <HistoryPanel designId={initial.id} width={size.width} height={size.height} readOnly={readOnly} currentVersion={currentVersion} onRestore={restoreVersion} />
+      ) : panel === 'brand' ? (
+        <BrandPanel
+          kits={kits}
+          error={kitsError}
+          activeId={kit?.id ?? null}
+          designId={initial.id}
+          readOnly={readOnly}
+          onPick={pickKit}
+          onApply={applyKit}
+          onAddLogo={(src) => {
+            const img = new Image();
+            const place = (w: number, h: number) => {
+              const el = newImage(size, src, { width: w, height: h });
+              const scale = Math.min(1, (size.width * 0.18) / el.w);
+              add({ ...el, w: Math.round(el.w * scale), h: Math.round(el.h * scale), x: Math.round(size.width * 0.05), y: Math.round(size.height * 0.05), fit: 'contain', name: 'Logo' });
+            };
+            void api.imageUrl(src).then((url) => {
+              img.onload = () => place(img.naturalWidth || 400, img.naturalHeight || 200);
+              img.onerror = () => place(400, 200);
+              img.src = url;
+            });
+          }}
+          onSaved={(k) => {
+            setKits((list) => [k, ...(list ?? []).filter((x) => x.id !== k.id)]);
+            pickKit(k.id);
+          }}
+          onRetry={() => void loadKits()}
+        />
+      ) : panel === 'design' ? (
         <Inspector
           page={page}
           width={size.width}
@@ -546,13 +766,18 @@ function Editor({ initial }: { initial: Design }) {
             replaceRef.current = selected[0]?.id ?? null;
             fileRef.current?.click();
           }}
+          grouped={grouped}
+          onGroup={group}
+          onUngroup={ungroup}
+          onCopyStyle={takeStyle}
+          onPasteStyle={styleClip ? putStyle : undefined}
         />
       ) : (
         <LayersPanel
           page={page}
           selection={selection}
           readOnly={readOnly}
-          onSelect={setSelection}
+          onSelect={select}
           onToggle={(id, key) => changeElements([id], (el) => ({ ...el, [key]: !el[key] }))}
           onMove={(id, by) =>
             changePage((p) => {
@@ -566,11 +791,13 @@ function Editor({ initial }: { initial: Design }) {
           }
         />
       )}
+      </div>
     </aside>
   );
 
   return (
-    <div className="editor">
+    <KitContext.Provider value={kit}>
+    <div className="editor route-in">
       <header className="editor__bar">
         <Link to="/" className="icon-btn" aria-label="Your designs" data-tip="Your designs">
           <ArrowLeft {...ICON} />
@@ -611,6 +838,25 @@ function Editor({ initial }: { initial: Design }) {
             trigger={(props) => (
               <button type="button" className="icon-btn" aria-label="Download" data-tip="Download" disabled={exporting} {...props}>
                 <DownloadIcon {...ICON} />
+              </button>
+            )}
+          />
+          <Menu
+            label="More"
+            placement="bottom-end"
+            items={[
+              { label: 'Comments', icon: <MessageCircle size={16} strokeWidth={1.75} />, onSelect: () => openPanel('comments') },
+              { label: 'Version history', icon: <History size={16} strokeWidth={1.75} />, onSelect: () => openPanel('history') },
+              { label: 'Brand kits', icon: <Palette size={16} strokeWidth={1.75} />, onSelect: () => openPanel('brand') },
+              'separator',
+              { label: 'Save as a template…', icon: <LayoutTemplate size={16} strokeWidth={1.75} />, onSelect: () => {
+                void save();
+                setSavingTemplate(true);
+              } },
+            ]}
+            trigger={(props) => (
+              <button type="button" className="icon-btn" aria-label="More" data-tip="More" {...props}>
+                <MoreHorizontal {...ICON} />
               </button>
             )}
           />
@@ -655,12 +901,31 @@ function Editor({ initial }: { initial: Design }) {
               selection={selection}
               readOnly={readOnly}
               editingId={editingId}
-              onSelect={setSelection}
+              onSelect={select}
               onEditText={setEditingId}
               onPreview={(fn) => history.preview(mapPage(fn))}
               onCommit={history.commit}
               onDropFiles={(files, at) => void insertImages(files, at)}
+              pins={pins}
+              pinMode={pinMode}
+              onPlacePin={(at) => {
+                setPinMode(false);
+                setPendingPin({ page: pageIndex, ...at });
+                openPanel('comments');
+              }}
+              onOpenPin={(id) => {
+                setOpenComment(id);
+                openPanel('comments');
+              }}
             />
+            {pinMode && (
+              <div className="editor__pin-hint" role="status">
+                Click the page where your comment goes.{' '}
+                <button type="button" className="elum-btn elum-btn--quiet elum-btn--sm" onClick={() => setPinMode(false)}>
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
           <div className="editor__foot">
             {narrow ? (
@@ -719,6 +984,11 @@ function Editor({ initial }: { initial: Design }) {
       )}
 
       {presenting && <Present pages={content.pages} start={pageIndex} width={size.width} height={size.height} onClose={() => setPresenting(false)} />}
+      <SaveTemplateDialog
+        design={savingTemplate ? { id: initial.id, title } : null}
+        onClose={() => setSavingTemplate(false)}
+        onSaved={(t) => toast(`Saved “${t.title}” to your templates. Find it on the home page.`, { tone: 'success' })}
+      />
       <ShareDialog open={sharing} onClose={() => setSharing(false)} designId={initial.id} title={title} role={initial.role} owner={initial.owner} />
       {exporting && (
         <div className="editor__exporting" role="status">
@@ -727,6 +997,33 @@ function Editor({ initial }: { initial: Design }) {
       )}
       {/* Never leave a stale title in the tab. */}
       <TitleSync title={title} />
+    </div>
+    </KitContext.Provider>
+  );
+}
+
+/** The editor's shape while the design opens, so the page does not jump when it arrives. */
+function EditorSkeleton() {
+  return (
+    <div className="editor editor--loading" aria-busy="true">
+      <header className="editor__bar">
+        <span className="skeleton" style={{ width: 28, height: 28, borderRadius: 8 }} />
+        <span className="skeleton skeleton--line" style={{ width: 180 }} />
+      </header>
+      <div className="editor__body">
+        <div className="editor__skeleton-strip">
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="skeleton" style={{ aspectRatio: '16 / 10' }} />
+          ))}
+        </div>
+        <main className="editor__main">
+          <div className="editor__area">
+            <div className="editor__skeleton-page skeleton">
+              <Loader size={44} label="Opening your design" />
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

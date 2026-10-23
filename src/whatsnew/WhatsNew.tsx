@@ -2,11 +2,14 @@ import { ArrowLeft, ArrowRight, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { MakeMark } from '../components/Brand';
-import { APP_NAME, RELEASES, tourSteps, unseenReleases, type Step } from './releases';
+import { api } from '../api';
+import { APP_NAME, RELEASES, tourSteps, whatsNewPlan, type Step } from './releases';
 import { Scene } from './scenes';
 import './WhatsNew.css';
 
 const SEEN_KEY = 'elum.make.whats-new';
+/** Where the account remembers the last release seen (a flat key in the user's metadata). */
+const ACCOUNT_KEY = 'whatsnew_make';
 const OPEN_EVENT = 'elum:whats-new';
 const ACCENT = '#ec7fa9';
 
@@ -18,12 +21,16 @@ function lastSeen(): string | null {
   }
 }
 
-function markSeen() {
+/** Remembers the latest release here (a cache) and, when it needs to, on the account. */
+function markSeen(onAccount = true) {
+  const latest = RELEASES[0]?.id;
+  if (!latest) return;
   try {
-    if (RELEASES[0]) localStorage.setItem(SEEN_KEY, RELEASES[0].id);
+    localStorage.setItem(SEEN_KEY, latest);
   } catch {
-    // Without storage the tour shows again next time, which is harmless.
+    // Without storage the account still remembers it.
   }
+  if (onAccount) void api.rememberSeen?.(ACCOUNT_KEY, latest).catch(() => undefined);
 }
 
 /** Opens the tour of every release, from a menu. */
@@ -38,8 +45,18 @@ export function WhatsNew() {
 
   useEffect(() => {
     if (status !== 'signed-in') return;
-    const unseen = unseenReleases(RELEASES, lastSeen());
-    if (unseen.length) setSteps(tourSteps(unseen));
+    let live = true;
+    const fromAccount = api.seenRelease ? api.seenRelease(ACCOUNT_KEY).catch(() => null) : Promise.resolve(null);
+    void fromAccount.then((account) => {
+      if (!live) return;
+      const plan = whatsNewPlan(RELEASES, account, lastSeen());
+      if (plan.show.length) setSteps(tourSteps(plan.show));
+      else if (plan.record) markSeen(true);
+      else markSeen(false);
+    });
+    return () => {
+      live = false;
+    };
   }, [status]);
 
   useEffect(() => {

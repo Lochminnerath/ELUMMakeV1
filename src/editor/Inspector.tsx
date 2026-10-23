@@ -1,8 +1,9 @@
-import { AlignCenter, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, ArrowDownToLine, ArrowUpToLine, Bold, BringToFront, ImageUp, Italic, SendToBack, Underline } from 'lucide-react';
+import { AlignCenter, Group, Paintbrush, PaintBucket, Ungroup, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignLeft, AlignRight, AlignStartHorizontal, AlignStartVertical, ArrowDownToLine, ArrowUpToLine, Bold, BringToFront, ImageUp, Italic, SendToBack, Underline } from 'lucide-react';
 import { PrivateIcon, UnlockedIcon } from '../components/icons/ElumIcons';
 import { DeleteIcon, DuplicateIcon } from '../components/icons/ElumIcons';
 import type { ReactNode } from 'react';
-import type { DesignElement, Page, TextElement } from '../api/types';
+import type { Appear, DesignElement, Page, PageTransition, TextElement } from '../api/types';
+import { useKit } from './kit';
 import { ColorField } from './ColorField';
 import { backgroundCss, BACKGROUNDS, bounds, FONTS, PAGE_SIZES, textHeight, unionBox } from './model';
 
@@ -26,6 +27,13 @@ interface InspectorProps {
   onDuplicate(): void;
   onDelete(): void;
   onReplaceImage(): void;
+  /** True when the selection is exactly one group. */
+  grouped: boolean;
+  onGroup(): void;
+  onUngroup(): void;
+  onCopyStyle(): void;
+  /** Present when a style has been copied. */
+  onPasteStyle?: () => void;
 }
 
 const ICON = { size: 16, strokeWidth: 1.75 };
@@ -71,6 +79,8 @@ function Toggle({ label, pressed, onClick, children }: { label: string; pressed?
 
 export function Inspector(props: InspectorProps) {
   const { page, width, height, selected, readOnly, onChange, onPage } = props;
+  const kit = useKit();
+  const kitFonts = (kit?.fonts ?? []).filter((f) => FONTS.some((x) => x.family === f));
 
   if (readOnly) {
     return (
@@ -123,6 +133,16 @@ export function Inspector(props: InspectorProps) {
             ))}
           </select>
           <p className="inspector__hint muted">Every page in the design shares one size. Elements keep their place.</p>
+        </Section>
+        <Section title="When presenting">
+          <label className="inspector__field">
+            <span className="inspector__label">This page comes in</span>
+            <select className="select" aria-label="Page transition" value={page.transition ?? 'none'} onChange={(e) => onPage({ transition: e.target.value === 'none' ? undefined : (e.target.value as PageTransition) })}>
+              <option value="none">Straight away</option>
+              <option value="fade">With a fade</option>
+              <option value="slide">Sliding in</option>
+            </select>
+          </label>
         </Section>
         <Section title="Speaker notes">
           <textarea
@@ -180,16 +200,48 @@ export function Inspector(props: InspectorProps) {
             <DeleteIcon {...ICON} />
           </Toggle>
         </div>
+        <div className="inspector__actions">
+          {props.grouped ? (
+            <Toggle label="Ungroup (Ctrl+Shift+G)" onClick={props.onUngroup}>
+              <Ungroup {...ICON} />
+            </Toggle>
+          ) : (
+            selected.length > 1 && (
+              <Toggle label="Group (Ctrl+G)" onClick={props.onGroup}>
+                <Group {...ICON} />
+              </Toggle>
+            )
+          )}
+          <Toggle label="Copy style (Ctrl+Alt+C)" onClick={props.onCopyStyle}>
+            <Paintbrush {...ICON} />
+          </Toggle>
+          {props.onPasteStyle && (
+            <Toggle label="Paste style (Ctrl+Alt+V)" onClick={props.onPasteStyle}>
+              <PaintBucket {...ICON} />
+            </Toggle>
+          )}
+        </div>
       </Section>
 
       {texts.length > 0 && (
         <Section title="Text">
           <select className="select" aria-label="Font" value={texts[0].fontFamily} onChange={(e) => setText({ fontFamily: e.target.value })} style={{ fontFamily: texts[0].fontFamily }}>
-            {FONTS.map((f) => (
-              <option key={f.family} value={f.family} style={{ fontFamily: f.family }}>
-                {f.label}
-              </option>
-            ))}
+            {kitFonts.length > 0 && (
+              <optgroup label={kit!.name}>
+                {kitFonts.map((f) => (
+                  <option key={`kit-${f}`} value={f} style={{ fontFamily: f }}>
+                    {f}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label={kitFonts.length ? 'All fonts' : 'Fonts'}>
+              {FONTS.filter((f) => !kitFonts.includes(f.family)).map((f) => (
+                <option key={f.family} value={f.family} style={{ fontFamily: f.family }}>
+                  {f.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
           <div className="inspector__row">
             <NumberField label="Size" value={texts[0].fontSize} min={4} max={1000} onChange={(v) => setText({ fontSize: v })} />
@@ -275,6 +327,27 @@ export function Inspector(props: InspectorProps) {
           </div>
         </Section>
       )}
+
+      <Section title="When presenting">
+        <label className="inspector__field">
+          <span className="inspector__label">{selected.length > 1 ? 'These come in' : 'This comes in'}</span>
+          <select
+            className="select"
+            aria-label="Entrance when presenting"
+            value={selected.every((el) => el.appear === selected[0].appear) ? (selected[0].appear ?? 'none') : 'mixed'}
+            onChange={(e) => set({ appear: e.target.value === 'none' ? undefined : (e.target.value as Appear) })}
+          >
+            {!selected.every((el) => el.appear === selected[0].appear) && <option value="mixed" disabled>Mixed</option>}
+            <option value="none">With the page</option>
+            <option value="fade">On a click, fading in</option>
+            <option value="slide">On a click, sliding up</option>
+            <option value="scale">On a click, growing in</option>
+          </select>
+        </label>
+        {selected[0].appear && (
+          <p className="inspector__hint muted">Elements come in one after another, from the bottom layer up.</p>
+        )}
+      </Section>
 
       <Section title="Position">
         {one && one.type !== 'line' ? (

@@ -66,7 +66,13 @@ export interface Page {
   elements: DesignElement[];
   /** Speaker notes, shown when presenting. */
   notes?: string;
+  /** How this page arrives when presenting. Missing means it simply appears. */
+  transition?: PageTransition;
 }
+
+export type PageTransition = 'none' | 'fade' | 'slide';
+/** How an element comes in when presenting, one after another in layer order. */
+export type Appear = 'fade' | 'slide' | 'scale';
 
 export type ElementType = 'text' | 'rect' | 'ellipse' | 'triangle' | 'star' | 'line' | 'image';
 
@@ -84,6 +90,10 @@ interface BaseElement {
   locked?: boolean;
   hidden?: boolean;
   name?: string;
+  /** Elements sharing a group id are selected and moved together. */
+  groupId?: string;
+  /** Present mode: the element comes in on a click, with this effect. */
+  appear?: Appear;
 }
 
 export interface TextElement extends BaseElement {

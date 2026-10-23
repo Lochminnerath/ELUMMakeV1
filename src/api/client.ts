@@ -101,6 +101,11 @@ export interface MakeApi {
   incrementViews(designId: string): Promise<void>;
   favorites(): Promise<Favorite[]>;
   toggleFavorite(designId: string, favorited: boolean): Promise<void>;
+
+  // Small things remembered on the account, so they follow you to every device.
+  /** The value last remembered under `key` (such as the last What's new release seen), or null. */
+  seenRelease?(key: string): Promise<string | null>;
+  rememberSeen?(key: string, id: string): Promise<void>;
 }
 
 export interface NotificationsApi {

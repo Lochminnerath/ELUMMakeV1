@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/AuthProvider';
 import { RedirectIfSignedIn, RequireAuth } from './auth/guards';
 import { DesignIcon } from './components/Brand';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { SupportLinks } from './components/SupportLink';
 import { FullPageLoader } from './components/Loader';
 import { ToastProvider } from './components/Toast';
 import { TooltipLayer } from './components/TooltipLayer';
@@ -82,6 +83,7 @@ function NotFound() {
       <Link to="/" className="elum-btn elum-btn--primary">
         Go to your designs
       </Link>
+      <SupportLinks app="make" code="not-found" message="We could not find that page" />
     </div>
   );
 }

@@ -43,9 +43,25 @@ export interface CanvasProps {
   /** The gesture ended. */
   onCommit(): void;
   onDropFiles(files: File[], at: { x: number; y: number }): void;
+  /** Comment pins on this page, numbered as in the comments panel. */
+  pins?: CanvasPin[];
+  /** Picking a spot for a new comment: the next click on the page places it. */
+  pinMode?: boolean;
+  onPlacePin?(at: { x: number; y: number }): void;
+  onOpenPin?(id: string): void;
 }
 
-export function Canvas({ page, width, height, zoom, selection, readOnly, editingId, onSelect, onEditText, onPreview, onCommit, onDropFiles }: CanvasProps) {
+export interface CanvasPin {
+  id: string;
+  n: number | string;
+  x: number;
+  y: number;
+  resolved?: boolean;
+  active?: boolean;
+  pending?: boolean;
+}
+
+export function Canvas({ page, width, height, zoom, selection, readOnly, editingId, onSelect, onEditText, onPreview, onCommit, onDropFiles, pins = [], pinMode = false, onPlacePin, onOpenPin }: CanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
   // The second press of a double-click on a text. The page holds the pointer while dragging, so the
@@ -382,6 +398,36 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
         )}
         {marquee && <rect className="stage__marquee" x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} strokeWidth={stroke} />}
       </svg>
+
+      {pins.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          className="pin"
+          data-resolved={p.resolved || undefined}
+          data-active={p.active || undefined}
+          data-pending={p.pending || undefined}
+          style={{ left: p.x * zoom, top: p.y * zoom }}
+          aria-label={p.pending ? 'New comment here' : `Comment ${p.n}`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => !p.pending && onOpenPin?.(p.id)}
+        >
+          <span>{p.n}</span>
+        </button>
+      ))}
+      {pinMode && (
+        <div
+          className="stage__pin-layer"
+          role="button"
+          tabIndex={-1}
+          aria-label="Click where the comment goes"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            const at = toPage(e);
+            onPlacePin?.({ x: Math.round(Math.max(0, Math.min(width, at.x))), y: Math.round(Math.max(0, Math.min(height, at.y))) });
+          }}
+        />
+      )}
 
       {editing && (
         <TextEditor
