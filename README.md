@@ -66,12 +66,12 @@ sh supabase/tests/run.sh   # database tests (needs Postgres: PGHOST, PGUSER)
 ## Deploy (Netlify)
 
 1. Create a site from this repository (suggested name: `elummake`, so it lives at
-   https://elummake.netlify.app). `netlify.toml` has the build settings.
+   https://makebyelum.netlify.app). `netlify.toml` has the build settings.
 2. Site configuration > Environment variables, for all deploy contexts:
    - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: the same values as Write and Type.
    - Optional: `VITE_ELUM_ACCOUNT_URL` once ELUM Account is live.
 3. In Supabase, run the Make migration (see [supabase/README.md](supabase/README.md)) and add
-   `https://elummake.netlify.app/**` to Authentication > URL Configuration > Redirect URLs.
+   `https://makebyelum.netlify.app/**` to Authentication > URL Configuration > Redirect URLs.
 
 ## What's new
 
