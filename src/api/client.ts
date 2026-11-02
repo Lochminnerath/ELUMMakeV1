@@ -1,3 +1,4 @@
+import type { ServiceState } from '../lib/platform';
 import type {
   AppNotification,
   BrandKit,
@@ -106,6 +107,11 @@ export interface MakeApi {
   /** The value last remembered under `key` (such as the last What's new release seen), or null. */
   seenRelease?(key: string): Promise<string | null>;
   rememberSeen?(key: string, id: string): Promise<void>;
+
+  /** The ELUM apps this account has added (in ELUM Store). Null when signed out, or unknown. */
+  elumApps?(): Promise<string[] | null>;
+  /** This app as the ELUM Console set it: mode, message, open incidents and flags. */
+  serviceState?(service: string): Promise<ServiceState | null>;
 }
 
 export interface NotificationsApi {
