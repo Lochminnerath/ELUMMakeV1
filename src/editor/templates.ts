@@ -312,7 +312,7 @@ export const TEMPLATES: Template[] = [
     ...dims('letter'),
     build: () =>
       documentPage('Invoice', '#3fc4a0', [
-        ['From', 'Your name\nYour address\nyou@elum.services'],
+        ['From', 'Your name\nYour address\nyou@elum.space'],
         ['To', 'Client name\nClient address'],
         ['Work', 'Design work · 10 hours · $500\nRevisions · 2 hours · $100'],
         ['Total due', '$600 by 30 November. Thank you!'],
