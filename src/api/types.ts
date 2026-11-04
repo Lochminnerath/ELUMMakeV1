@@ -8,7 +8,7 @@ export type Role = 'owner' | 'editor' | 'viewer';
 export type ShareRole = Exclude<Role, 'owner'>;
 
 /**
- * `type`: an ELUM Type address (handle@type.elum.services).
+ * `type`: an ELUM Type address (handle@elum.space).
  * `external`: the person's own email provider.
  */
 export type AccountType = 'type' | 'external';

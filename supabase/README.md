@@ -15,8 +15,8 @@ Then Make's own:
 3. `migrations/20261025000000_make_schema.sql`
 
 It adds the `make` schema (designs and shares), the `make-images` storage bucket with its policies,
-the `make.design.shared` notification, and opens Make (beta) in `elum.services`. It is safe to read
-before running: it only creates new things, plus that one row in `elum.services`.
+the `make.design.shared` notification, and opens Make (beta) in `elum.space`. It is safe to read
+before running: it only creates new things, plus that one row in `elum.space`.
 
 ## How the app reaches it
 

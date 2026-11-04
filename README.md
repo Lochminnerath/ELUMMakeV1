@@ -39,7 +39,7 @@ is what other people see (name, colour). Nothing about accounts lives in Make's 
 - With **Confirm email** on in Supabase, people confirm by the link in their email before they can
   sign in. Supabase's built-in email only reaches your own team, so set up SMTP (Supabase >
   Authentication > Emails > SMTP Settings) before opening sign-ups to everyone.
-- People can also sign up with a new **ELUM Type address** (`name@type.elum.services`), created by the
+- People can also sign up with a new **ELUM Type address** (`name@elum.space`), created by the
   `type-signup` edge function from the Type repository.
 - With `VITE_ELUM_ACCOUNT_URL` set, signing in goes through ELUM Account, so one sign-in covers every
   ELUM app.
