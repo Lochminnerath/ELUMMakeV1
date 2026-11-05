@@ -1,6 +1,6 @@
 # ELUM Make
 
-Slides, posters and social posts, designed by people and shared across ELUM. Built by people. Runs without AI.
+Slides, posters and social posts, designed by you and shared across ELUM. Made by you. Runs without AI.
 
 Make is one of the ELUM apps (with Write, Type and ELUM Account). Every ELUM app shares one Supabase
 project: one account works everywhere, and shares and notifications flow between apps.

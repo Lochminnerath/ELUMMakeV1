@@ -2,7 +2,7 @@
   "name": "elum-make",
   "private": true,
   "version": "0.1.0",
-  "description": "ELUM Make: slides, posters and posts, designed by people.",
+  "description": "ELUM Make: slides, posters and posts, designed by you.",
   "type": "module",
   "scripts": {
     "dev": "vite",
