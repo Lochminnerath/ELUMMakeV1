@@ -30,6 +30,8 @@ export interface MakeApi {
   restoreSession(): Promise<Session | null>;
   signUp(input: SignUpInput): Promise<Session>;
   signIn(input: SignInInput): Promise<Session>;
+  /** Signs in with a passkey. Only on ELUM's own domain (elum.space), where passkeys work. */
+  signInWithPasskey?(): Promise<Session>;
   signOut(): Promise<void>;
   updateProfile(input: { name: string }): Promise<User>;
   /** Calls back when the session ends (expired, revoked, signed out in another tab). */
