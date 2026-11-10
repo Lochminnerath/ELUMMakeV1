@@ -4,11 +4,14 @@ import type {
   DesignElement,
   DesignKind,
   ElementType,
+  ImageAdjust,
   ImageElement,
   LineElement,
   Page,
   PageTransition,
+  PathElement,
   ShapeElement,
+  ShapeType,
   TextElement,
 } from '../api/types';
 
@@ -33,6 +36,11 @@ export const PAGE_SIZES: PageSize[] = [
   { id: 'banner', label: 'Banner', kind: 'social', width: 1500, height: 500 },
   { id: 'a4', label: 'Poster (A4)', kind: 'poster', width: 1240, height: 1754 },
   { id: 'letter', label: 'Flyer (US Letter)', kind: 'poster', width: 1275, height: 1650 },
+  { id: 'certificate', label: 'Certificate (landscape)', kind: 'poster', width: 1650, height: 1275 },
+  { id: 'business-card', label: 'Business card', kind: 'custom', width: 1050, height: 600 },
+  { id: 'logo', label: 'Logo', kind: 'custom', width: 1000, height: 1000 },
+  { id: 'desktop', label: 'Website (desktop)', kind: 'custom', width: 1440, height: 1024 },
+  { id: 'phone', label: 'App screen (phone)', kind: 'custom', width: 390, height: 844 },
 ];
 
 export const FONTS = [
@@ -44,6 +52,58 @@ export const FONTS = [
   { family: 'Bebas Neue', label: 'Bebas Neue' },
   { family: 'Caveat', label: 'Caveat' },
   { family: 'IBM Plex Mono', label: 'IBM Plex Mono' },
+  { family: 'DM Serif Display', label: 'DM Serif Display' },
+  { family: 'Archivo Black', label: 'Archivo Black' },
+  { family: 'Pacifico', label: 'Pacifico' },
+  { family: 'Montserrat', label: 'Montserrat' },
+  { family: 'Fraunces', label: 'Fraunces' },
+];
+
+/** Every ready-made shape, in the order the Shapes menu lists them. */
+export const SHAPES: { type: ShapeType; label: string }[] = [
+  { type: 'rect', label: 'Rectangle' },
+  { type: 'ellipse', label: 'Circle' },
+  { type: 'triangle', label: 'Triangle' },
+  { type: 'diamond', label: 'Diamond' },
+  { type: 'pentagon', label: 'Pentagon' },
+  { type: 'hexagon', label: 'Hexagon' },
+  { type: 'star', label: 'Star' },
+  { type: 'burst', label: 'Burst' },
+  { type: 'heart', label: 'Heart' },
+  { type: 'arrow', label: 'Arrow block' },
+  { type: 'bubble', label: 'Speech bubble' },
+  { type: 'cross', label: 'Plus' },
+];
+export const SHAPE_TYPES = SHAPES.map((x) => x.type);
+export const isShape = (el: { type: string }): el is ShapeElement => (SHAPE_TYPES as string[]).includes(el.type);
+
+/** Blend modes, named the way design tools name them. */
+export const BLENDS = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'multiply', label: 'Multiply' },
+  { value: 'screen', label: 'Screen' },
+  { value: 'overlay', label: 'Overlay' },
+  { value: 'darken', label: 'Darken' },
+  { value: 'lighten', label: 'Lighten' },
+  { value: 'color-dodge', label: 'Colour dodge' },
+  { value: 'color-burn', label: 'Colour burn' },
+  { value: 'difference', label: 'Difference' },
+  { value: 'luminosity', label: 'Luminosity' },
+] as const;
+
+/** A picture as it was taken. */
+export const NO_ADJUST: ImageAdjust = { brightness: 100, contrast: 100, saturate: 100, grayscale: 0, sepia: 0, hue: 0 };
+
+/** Ready-made looks for pictures: plain settings of the same sliders, nothing more. */
+export const PHOTO_FILTERS: { id: string; label: string; adjust: ImageAdjust }[] = [
+  { id: 'original', label: 'Original', adjust: NO_ADJUST },
+  { id: 'mono', label: 'Mono', adjust: { ...NO_ADJUST, grayscale: 100, contrast: 110 } },
+  { id: 'warm', label: 'Warm', adjust: { ...NO_ADJUST, sepia: 30, saturate: 120, brightness: 104 } },
+  { id: 'cool', label: 'Cool', adjust: { ...NO_ADJUST, hue: 200, saturate: 90, sepia: 10 } },
+  { id: 'vivid', label: 'Vivid', adjust: { ...NO_ADJUST, saturate: 150, contrast: 115 } },
+  { id: 'fade', label: 'Fade', adjust: { ...NO_ADJUST, contrast: 80, brightness: 110, saturate: 80 } },
+  { id: 'noir', label: 'Noir', adjust: { ...NO_ADJUST, grayscale: 100, contrast: 150, brightness: 90 } },
+  { id: 'sunlit', label: 'Sunlit', adjust: { ...NO_ADJUST, brightness: 112, sepia: 18, saturate: 115 } },
 ];
 
 /** The ELUM palette first, then neutrals: what the colour pickers offer before a custom colour. */
@@ -94,12 +154,29 @@ export function newText(page: { width: number; height: number }, preset: 'title'
   return el;
 }
 
-export function newShape(page: { width: number; height: number }, type: ShapeElement['type']): ShapeElement {
+const SHAPE_FILLS: Record<ShapeType, string> = {
+  rect: '#7093f8',
+  ellipse: '#ec7fa9',
+  triangle: '#3fc4a0',
+  star: '#e9b949',
+  diamond: '#9b84ee',
+  pentagon: '#f59a52',
+  hexagon: '#3fc4a0',
+  heart: '#ec7fa9',
+  arrow: '#7093f8',
+  bubble: '#eef2ff',
+  cross: '#f59a52',
+  burst: '#e9b949',
+};
+
+export function newShape(page: { width: number; height: number }, type: ShapeType): ShapeElement {
   const size = Math.round(Math.min(page.width, page.height) * 0.3);
+  // Arrows and speech bubbles read better wider than tall.
+  const w = type === 'arrow' || type === 'bubble' ? Math.round(size * 1.4) : size;
   return {
-    ...base(type, Math.round((page.width - size) / 2), Math.round((page.height - size) / 2), size, size),
+    ...base(type, Math.round((page.width - w) / 2), Math.round((page.height - size) / 2), w, size),
     type,
-    fill: type === 'rect' ? '#7093f8' : type === 'ellipse' ? '#ec7fa9' : type === 'triangle' ? '#3fc4a0' : '#e9b949',
+    fill: SHAPE_FILLS[type] ?? '#7093f8',
     stroke: '#141a2e',
     strokeWidth: 0,
     radius: 0,
@@ -123,6 +200,65 @@ export function newImage(page: { width: number; height: number }, src: string, n
   const w = Math.max(20, Math.round(natural.width * scale));
   const h = Math.max(20, Math.round(natural.height * scale));
   return { ...base('image', Math.round((page.width - w) / 2), Math.round((page.height - h) / 2), w, h), type: 'image', src, fit: 'cover', radius: 0 };
+}
+
+/**
+ * A vector from points in page pixels, as the pen or the brush leaves them. Its box is the
+ * points' bounds, and the points are kept as fractions of it.
+ */
+export function newPath(points: { x: number; y: number }[], opts: { closed: boolean; smooth: boolean; stroke: string; strokeWidth: number; fill: string }): PathElement {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  const w = Math.max(1, Math.max(...xs) - x);
+  const h = Math.max(1, Math.max(...ys) - y);
+  return {
+    ...base('path', Math.round(x), Math.round(y), Math.round(w), Math.round(h)),
+    type: 'path',
+    points: points.map((p) => [round4((p.x - x) / w), round4((p.y - y) / h)]),
+    closed: opts.closed,
+    smooth: opts.smooth,
+    fill: opts.fill,
+    stroke: opts.stroke,
+    strokeWidth: opts.strokeWidth,
+  };
+}
+
+const round4 = (n: number) => Math.round(n * 10000) / 10000;
+
+/**
+ * Fewer points along a hand-drawn stroke, keeping its shape (Ramer–Douglas–Peucker): points
+ * closer than `tolerance` to the line between their neighbours go.
+ */
+export function simplifyPoints(points: { x: number; y: number }[], tolerance: number): { x: number; y: number }[] {
+  if (points.length < 3) return points;
+  const distance = (p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (!len) return Math.hypot(p.x - a.x, p.y - a.y);
+    return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / len;
+  };
+  const keep = (from: number, to: number, out: boolean[]) => {
+    let far = -1;
+    let most = 0;
+    for (let i = from + 1; i < to; i++) {
+      const d = distance(points[i], points[from], points[to]);
+      if (d > most) {
+        most = d;
+        far = i;
+      }
+    }
+    if (far !== -1 && most > tolerance) {
+      out[far] = true;
+      keep(from, far, out);
+      keep(far, to, out);
+    }
+  };
+  const out = points.map((_, i) => i === 0 || i === points.length - 1);
+  keep(0, points.length - 1, out);
+  return points.filter((_, i) => out[i]);
 }
 
 export function newPage(background = '#ffffff'): Page {
@@ -149,7 +285,8 @@ export function normalizeContent(raw: unknown): DesignContent {
       notes: typeof p.notes === 'string' ? p.notes : undefined,
       transition: TRANSITIONS.includes(p.transition as PageTransition) && p.transition !== 'none' ? p.transition : undefined,
       elements: (Array.isArray(p.elements) ? p.elements : [])
-        .filter((e) => e && typeof e === 'object' && ['text', 'rect', 'ellipse', 'triangle', 'star', 'line', 'image'].includes(e.type))
+        .filter((e) => e && typeof e === 'object' && ['text', ...SHAPE_TYPES, 'line', 'image', 'path'].includes(e.type))
+        .filter((e) => e.type !== 'path' || (Array.isArray((e as PathElement).points) && (e as PathElement).points.length >= 2))
         .map((e) => ({
           ...e,
           id: e.id || uid(),
@@ -301,7 +438,8 @@ export function textWidth(text: string, el: Pick<TextElement, 'fontFamily' | 'fo
 export function layoutText(el: TextElement): string[] {
   const max = Math.max(el.w, el.fontSize);
   const lines: string[] = [];
-  for (const paragraph of el.text.split('\n')) {
+  const text = el.uppercase ? el.text.toUpperCase() : el.text;
+  for (const paragraph of text.split('\n')) {
     const words = paragraph.split(/(\s+)/);
     let line = '';
     for (const word of words) {
@@ -434,9 +572,12 @@ export function isOneGroup(elements: DesignElement[], ids: string[]): boolean {
 // --------------------------------------------------------------- copying style
 
 /** The look of an element, without its place, size or content. */
-export type Style = Partial<Record<'fill' | 'stroke' | 'strokeWidth' | 'radius' | 'color' | 'fontFamily' | 'fontSize' | 'fontWeight' | 'italic' | 'underline' | 'align' | 'lineHeight' | 'letterSpacing' | 'opacity' | 'dashed', unknown>>;
+const STYLE_KEYS = [
+  'fill', 'stroke', 'strokeWidth', 'radius', 'color', 'fontFamily', 'fontSize', 'fontWeight', 'italic', 'underline', 'align', 'lineHeight', 'letterSpacing', 'opacity', 'dashed',
+  'shadow', 'blur', 'blend', 'outline', 'uppercase', 'highlight', 'adjust',
+] as const;
 
-const STYLE_KEYS = ['fill', 'stroke', 'strokeWidth', 'radius', 'color', 'fontFamily', 'fontSize', 'fontWeight', 'italic', 'underline', 'align', 'lineHeight', 'letterSpacing', 'opacity', 'dashed'] as const;
+export type Style = Partial<Record<(typeof STYLE_KEYS)[number], unknown>>;
 
 export function copyStyle(el: DesignElement): Style {
   const style: Style = {};
@@ -448,9 +589,15 @@ export function copyStyle(el: DesignElement): Style {
 }
 
 /** Puts a copied style on an element, only where the element has that property. */
+const EFFECT_KEYS = new Set<string>(['shadow', 'blur', 'blend']);
+
 export function pasteStyle(el: DesignElement, style: Style): DesignElement {
   const next = { ...el } as unknown as Record<string, unknown>;
-  for (const k of STYLE_KEYS) if (k in el && style[k] !== undefined) next[k] = style[k];
+  for (const k of STYLE_KEYS) {
+    // Effects suit any element; the rest only where the element already has that property.
+    const fits = k in el || EFFECT_KEYS.has(k) || (el.type === 'text' && ['outline', 'uppercase', 'highlight'].includes(k)) || (el.type === 'image' && k === 'adjust');
+    if (fits && style[k] !== undefined) next[k] = style[k];
+  }
   const out = next as unknown as DesignElement;
   return out.type === 'text' ? { ...out, h: textHeight(out) } : out;
 }
@@ -484,6 +631,7 @@ export function applyKitToPage(page: Page, kit: { colors: string[]; fonts: strin
       if (!paint.length) return el;
       if (el.type === 'line') return { ...el, stroke: paint[n++ % paint.length] };
       if (el.type === 'image') return el;
+      if (el.type === 'path') return el.fill === 'none' ? { ...el, stroke: paint[n++ % paint.length] } : { ...el, fill: paint[n++ % paint.length] };
       return { ...el, fill: paint[n++ % paint.length] };
     }),
   };
@@ -506,4 +654,159 @@ export function luminance(hex: string): number {
 /** The elements that come in on a click, in the order they come in (bottom layer first). */
 export function appearOrder(page: Page): string[] {
   return page.elements.filter((el) => el.appear && !el.hidden).map((el) => el.id);
+}
+
+// ------------------------------------------------------------- shapes as paths
+
+const f = (n: number) => Math.round(n * 100) / 100;
+const poly = (pts: [number, number][]) => `M${pts.map(([x, y]) => `${f(x)},${f(y)}`).join('L')}Z`;
+/** A regular polygon with `n` corners filling a w × h box, one corner at the top. */
+function regular(n: number, w: number, h: number): string {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (Math.PI * 2 * i) / n - Math.PI / 2;
+    pts.push([w / 2 + (Math.cos(a) * w) / 2, h / 2 + (Math.sin(a) * h) / 2]);
+  }
+  return poly(pts);
+}
+/** A star with `n` tips; `inner` is how far in the dips reach, as a share of the tips. */
+function starry(n: number, inner: number, w: number, h: number): string {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < n * 2; i++) {
+    const r = i % 2 === 0 ? 0.5 : 0.5 * inner;
+    const a = (Math.PI / n) * i - Math.PI / 2;
+    pts.push([w / 2 + Math.cos(a) * r * w, h / 2 + Math.sin(a) * r * h]);
+  }
+  return poly(pts);
+}
+
+/**
+ * Every ready-made shape as an SVG path filling its w × h box. The page, thumbnails, presenting
+ * and exports all draw shapes from this (exports through Path2D), so they always match.
+ */
+export function shapePath(type: ShapeType, w: number, h: number, radius = 0): string {
+  switch (type) {
+    case 'rect': {
+      const r = Math.max(0, Math.min(radius, w / 2, h / 2));
+      if (!r) return `M0,0H${f(w)}V${f(h)}H0Z`;
+      return `M${f(r)},0H${f(w - r)}A${f(r)},${f(r)} 0 0 1 ${f(w)},${f(r)}V${f(h - r)}A${f(r)},${f(r)} 0 0 1 ${f(w - r)},${f(h)}H${f(r)}A${f(r)},${f(r)} 0 0 1 0,${f(h - r)}V${f(r)}A${f(r)},${f(r)} 0 0 1 ${f(r)},0Z`;
+    }
+    case 'ellipse':
+      return `M0,${f(h / 2)}A${f(w / 2)},${f(h / 2)} 0 1 0 ${f(w)},${f(h / 2)}A${f(w / 2)},${f(h / 2)} 0 1 0 0,${f(h / 2)}Z`;
+    case 'triangle':
+      return poly([[w / 2, 0], [w, h], [0, h]]);
+    case 'diamond':
+      return poly([[w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2]]);
+    case 'pentagon':
+      return regular(5, w, h);
+    case 'hexagon':
+      return poly([[w * 0.25, 0], [w * 0.75, 0], [w, h / 2], [w * 0.75, h], [w * 0.25, h], [0, h / 2]]);
+    case 'star':
+      // The five-pointed star Make has always drawn, so older designs look the same.
+      return `M${starPoints(w, h).split(' ').join('L')}Z`;
+    case 'burst':
+      return starry(12, 0.72, w, h);
+    case 'heart':
+      return `M${f(w / 2)},${f(h * 0.3)}C${f(w * 0.5)},${f(h * 0.05)} ${f(w * 0.05)},${f(-h * 0.05)} ${f(0)},${f(h * 0.3)}C${f(-w * 0.03)},${f(h * 0.6)} ${f(w * 0.35)},${f(h * 0.8)} ${f(w / 2)},${f(h)}C${f(w * 0.65)},${f(h * 0.8)} ${f(w * 1.03)},${f(h * 0.6)} ${f(w)},${f(h * 0.3)}C${f(w * 0.95)},${f(-h * 0.05)} ${f(w * 0.5)},${f(h * 0.05)} ${f(w / 2)},${f(h * 0.3)}Z`;
+    case 'arrow': {
+      const head = Math.min(w * 0.45, h);
+      return poly([[0, h * 0.28], [w - head, h * 0.28], [w - head, 0], [w, h / 2], [w - head, h], [w - head, h * 0.72], [0, h * 0.72]]);
+    }
+    case 'bubble': {
+      const body = h * 0.78;
+      const r = Math.min(w, body) * 0.2;
+      return `M${f(r)},0H${f(w - r)}A${f(r)},${f(r)} 0 0 1 ${f(w)},${f(r)}V${f(body - r)}A${f(r)},${f(r)} 0 0 1 ${f(w - r)},${f(body)}H${f(w * 0.4)}L${f(w * 0.2)},${f(h)}L${f(w * 0.24)},${f(body)}H${f(r)}A${f(r)},${f(r)} 0 0 1 0,${f(body - r)}V${f(r)}A${f(r)},${f(r)} 0 0 1 ${f(r)},0Z`;
+    }
+    case 'cross': {
+      const t = Math.min(w, h) / 3;
+      const x1 = (w - t) / 2;
+      const y1 = (h - t) / 2;
+      return poly([[x1, 0], [x1 + t, 0], [x1 + t, y1], [w, y1], [w, y1 + t], [x1 + t, y1 + t], [x1 + t, h], [x1, h], [x1, y1 + t], [0, y1 + t], [0, y1], [x1, y1]]);
+    }
+  }
+}
+
+/**
+ * A pen or brush path as SVG, at its box's size. Smooth paths curve through every point
+ * (Catmull–Rom turned into cubic Béziers); others go straight from point to point.
+ */
+export function pathD(el: Pick<PathElement, 'points' | 'closed' | 'smooth' | 'w' | 'h'>): string {
+  const pts = el.points.map(([x, y]) => [x * el.w, y * el.h] as [number, number]);
+  if (pts.length < 2) return '';
+  if (!el.smooth || pts.length < 3) return `M${pts.map(([x, y]) => `${f(x)},${f(y)}`).join('L')}${el.closed ? 'Z' : ''}`;
+  const n = pts.length;
+  const at = (i: number) => (el.closed ? pts[(i + n) % n] : pts[Math.max(0, Math.min(n - 1, i))]);
+  let d = `M${f(pts[0][0])},${f(pts[0][1])}`;
+  const last = el.closed ? n : n - 1;
+  for (let i = 0; i < last; i++) {
+    const p0 = at(i - 1);
+    const p1 = at(i);
+    const p2 = at(i + 1);
+    const p3 = at(i + 2);
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += `C${f(c1[0])},${f(c1[1])} ${f(c2[0])},${f(c2[1])} ${f(p2[0])},${f(p2[1])}`;
+  }
+  return el.closed ? `${d}Z` : d;
+}
+
+// ------------------------------------------------------------------- effects
+
+/** The CSS filter for an element's blur and shadow, and a picture's adjustments. */
+export function filterCss(el: DesignElement): string | undefined {
+  const parts: string[] = [];
+  if (el.type === 'image' && el.adjust) {
+    const a = el.adjust;
+    if (a.brightness !== 100) parts.push(`brightness(${a.brightness}%)`);
+    if (a.contrast !== 100) parts.push(`contrast(${a.contrast}%)`);
+    if (a.saturate !== 100) parts.push(`saturate(${a.saturate}%)`);
+    if (a.grayscale) parts.push(`grayscale(${a.grayscale}%)`);
+    if (a.sepia) parts.push(`sepia(${a.sepia}%)`);
+    if (a.hue) parts.push(`hue-rotate(${a.hue}deg)`);
+  }
+  if (el.blur && el.blur > 0) parts.push(`blur(${el.blur}px)`);
+  if (el.shadow) parts.push(`drop-shadow(${el.shadow.x}px ${el.shadow.y}px ${Math.max(0, el.shadow.blur)}px ${el.shadow.color})`);
+  return parts.length ? parts.join(' ') : undefined;
+}
+
+/** A paint is a plain colour or a gradient; this says which, the way backgrounds are read. */
+export function isGradient(paint: string): boolean {
+  return paint.startsWith('linear:');
+}
+
+// --------------------------------------------------------- resizing a design
+
+/**
+ * Everything on the pages moved and scaled to fit a new page size, keeping the layout's
+ * proportions and centring it: what "Resize" does in design tools, done by plain arithmetic.
+ */
+export function scaleContent(content: DesignContent, from: { width: number; height: number }, to: { width: number; height: number }): DesignContent {
+  const s = Math.min(to.width / from.width, to.height / from.height);
+  const ox = (to.width - from.width * s) / 2;
+  const oy = (to.height - from.height * s) / 2;
+  const r = (n: number) => Math.round(n * 100) / 100;
+  return {
+    pages: content.pages.map((p) => ({
+      ...p,
+      elements: p.elements.map((el) => {
+        const moved = { ...el, x: r(ox + el.x * s), y: r(oy + el.y * s), w: r(el.w * s), h: r(el.h * s) };
+        if (el.shadow) moved.shadow = { ...el.shadow, x: r(el.shadow.x * s), y: r(el.shadow.y * s), blur: r(el.shadow.blur * s) };
+        if (el.blur) moved.blur = r(el.blur * s);
+        switch (moved.type) {
+          case 'text': {
+            const t = { ...moved, fontSize: r(moved.fontSize * s), letterSpacing: r(moved.letterSpacing * s) };
+            if (t.outline) t.outline = { ...t.outline, width: r(t.outline.width * s) };
+            return { ...t, h: textHeight(t) };
+          }
+          case 'line':
+          case 'path':
+            return { ...moved, strokeWidth: r(moved.strokeWidth * s) };
+          case 'image':
+            return { ...moved, radius: r(moved.radius * s) };
+          default:
+            return { ...moved, strokeWidth: r(moved.strokeWidth * s), radius: r(moved.radius * s) } as DesignElement;
+        }
+      }),
+    })),
+  };
 }

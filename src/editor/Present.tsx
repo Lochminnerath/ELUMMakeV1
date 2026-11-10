@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, NotebookText, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Page } from '../api/types';
+import type { DesignElement, Page } from '../api/types';
 import { appearOrder } from './model';
 import { PageBackground, PlacedElement } from './render';
 
@@ -84,15 +84,16 @@ export function Present({ pages, start, width, height, onClose }: { pages: Page[
           aria-label={`Page ${index + 1}`}
         >
           <PageBackground page={page} width={width} height={height} />
-          {page.elements.map((el) =>
-            el.appear && !el.hidden ? (
+          {page.elements.map((el) => {
+            const linked = el.link && !el.hidden ? <LinkedElement el={el} onPage={(n) => setIndex(Math.max(0, Math.min(pages.length - 1, n - 1)))} /> : <PlacedElement el={el} />;
+            return el.appear && !el.hidden ? (
               <g key={el.id} className="appear" data-effect={el.appear} data-shown={shown.has(el.id) || undefined}>
-                <PlacedElement el={el} />
+                {linked}
               </g>
             ) : (
-              <PlacedElement key={el.id} el={el} />
-            ),
-          )}
+              <g key={el.id}>{linked}</g>
+            );
+          })}
         </svg>
       </button>
       {notes && page.notes && <div className="present__notes">{page.notes}</div>}
@@ -114,5 +115,30 @@ export function Present({ pages, start, width, height, onClose }: { pages: Page[
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * An element that opens something when clicked while presenting: a web page in a new tab, or
+ * another page of the design. The click does not also move to the next page.
+ */
+function LinkedElement({ el, onPage }: { el: DesignElement; onPage(n: number): void }) {
+  const link = el.link ?? '';
+  const page = /^page:(\d+)$/.exec(link);
+  const web = /^https:\/\/[^\s]+$/i.test(link) ? link : null;
+  if (!page && !web) return <PlacedElement el={el} />;
+  return (
+    <g
+      className="present__link"
+      role="link"
+      aria-label={page ? `Go to page ${page[1]}` : `Open ${web}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (page) onPage(Number(page[1]));
+        else window.open(web!, '_blank', 'noopener,noreferrer');
+      }}
+    >
+      <PlacedElement el={el} />
+    </g>
   );
 }

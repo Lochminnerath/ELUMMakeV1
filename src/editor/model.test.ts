@@ -101,8 +101,9 @@ describe('templates', () => {
   it('keeps the ids Store links to, and has no duplicates', () => {
     const ids = TEMPLATES.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual(expect.arrayContaining(['pitch', 'lesson', 'event-poster', 'quote-post']));
-    expect(ids.length).toBe(20);
+    expect(ids).toEqual(expect.arrayContaining(['pitch', 'lesson', 'event-poster', 'quote-post', 'logo', 'app-screen', 'landing-page']));
+    // ELUM Store lists every one of these (ELUMStoreV1 src/store/catalog.ts).
+    expect(ids.length).toBe(30);
   });
 });
 

@@ -2,10 +2,12 @@ import { AlignCenter, Group, Paintbrush, PaintBucket, Ungroup, AlignCenterHorizo
 import { PrivateIcon, UnlockedIcon } from '../components/icons/ElumIcons';
 import { DeleteIcon, DuplicateIcon } from '../components/icons/ElumIcons';
 import type { ReactNode } from 'react';
-import type { Appear, DesignElement, Page, PageTransition, TextElement } from '../api/types';
+import { useState } from 'react';
+import type { Appear, DesignElement, Page, PageTransition, PathElement, TextElement } from '../api/types';
 import { useKit } from './kit';
 import { ColorField } from './ColorField';
-import { backgroundCss, BACKGROUNDS, bounds, FONTS, PAGE_SIZES, textHeight, unionBox } from './model';
+import { backgroundCss, BACKGROUNDS, bounds, FONTS, isShape, PAGE_SIZES, SHAPES, textHeight, unionBox } from './model';
+import { EffectsFields, PaintField, PathFields, PictureFields, TextEffects } from './StudioFields';
 
 /** The panel beside the page: what is selected, and how to change it. With nothing selected, the page. */
 
@@ -20,7 +22,10 @@ interface InspectorProps {
   readOnly: boolean;
   onChange(ids: string[], changes: Partial<DesignElement> | ((el: DesignElement) => DesignElement)): void;
   onPage(changes: Partial<Page>): void;
-  onResize(width: number, height: number): void;
+  /** A new page size; `scale` also scales and centres everything on the pages to fit it. */
+  onResize(width: number, height: number, scale?: boolean): void;
+  /** How many pages the design has, for links that go to a page. */
+  pageCount?: number;
   onArrange(how: Arrange): void;
   onAlign(how: Align): void;
   onDistribute(axis: 'x' | 'y'): void;
@@ -79,6 +84,7 @@ function Toggle({ label, pressed, onClick, children }: { label: string; pressed?
 
 export function Inspector(props: InspectorProps) {
   const { page, width, height, selected, readOnly, onChange, onPage } = props;
+  const [scaleOnResize, setScaleOnResize] = useState(true);
   const kit = useKit();
   const kitFonts = (kit?.fonts ?? []).filter((f) => FONTS.some((x) => x.family === f));
 
@@ -122,7 +128,7 @@ export function Inspector(props: InspectorProps) {
             value={size?.id ?? 'custom'}
             onChange={(e) => {
               const s = PAGE_SIZES.find((x) => x.id === e.target.value);
-              if (s) props.onResize(s.width, s.height);
+              if (s) props.onResize(s.width, s.height, scaleOnResize);
             }}
           >
             {!size && <option value="custom">Custom ({width} × {height})</option>}
@@ -132,7 +138,12 @@ export function Inspector(props: InspectorProps) {
               </option>
             ))}
           </select>
-          <p className="inspector__hint muted">Every page in the design shares one size. Elements keep their place.</p>
+          <label className="inspector__check">
+            <input type="checkbox" checked={scaleOnResize} onChange={(e) => setScaleOnResize(e.target.checked)} /> Resize everything to fit the new size
+          </label>
+          <p className="inspector__hint muted">
+            Every page in the design shares one size. {scaleOnResize ? 'Everything scales and stays centred.' : 'Elements keep their place and size.'}
+          </p>
         </Section>
         <Section title="When presenting">
           <label className="inspector__field">
@@ -162,7 +173,8 @@ export function Inspector(props: InspectorProps) {
   const box = unionBox(selected.map(bounds))!;
   const set = (changes: Partial<DesignElement>) => onChange(ids, changes);
   const texts = selected.filter((el): el is TextElement => el.type === 'text');
-  const shapes = selected.filter((el) => el.type === 'rect' || el.type === 'ellipse' || el.type === 'triangle' || el.type === 'star');
+  const shapes = selected.filter(isShape);
+  const paths = selected.filter((el): el is PathElement => el.type === 'path');
   const setText = (changes: Partial<TextElement>) =>
     onChange(
       texts.map((t) => t.id),
@@ -272,23 +284,44 @@ export function Inspector(props: InspectorProps) {
             <NumberField label="Line" value={texts[0].lineHeight} min={0.7} max={3} step={0.05} onChange={(v) => setText({ lineHeight: v })} />
             <NumberField label="Letters" value={texts[0].letterSpacing} min={-20} max={100} step={0.5} onChange={(v) => setText({ letterSpacing: v })} />
           </div>
+          <TextEffects texts={texts} onChange={onChange} />
         </Section>
       )}
 
       {shapes.length > 0 && (
         <Section title="Shape">
-          <div className="inspector__row">
+          <div className="inspector__field">
             <span className="inspector__label">Fill</span>
-            <ColorField label="Fill" value={(shapes[0] as { fill: string }).fill} onChange={(c) => onChange(shapes.map((s) => s.id), { fill: c } as Partial<DesignElement>)} />
-            <span className="inspector__label">Border</span>
-            <ColorField label="Border colour" value={(shapes[0] as { stroke: string }).stroke} onChange={(c) => onChange(shapes.map((s) => s.id), { stroke: c } as Partial<DesignElement>)} />
+            <PaintField label="Fill" value={shapes[0].fill} onChange={(c) => onChange(shapes.map((s) => s.id), { fill: c } as Partial<DesignElement>)} />
           </div>
+          <div className="inspector__row">
+            <span className="inspector__label">Border</span>
+            <ColorField label="Border colour" value={shapes[0].stroke} onChange={(c) => onChange(shapes.map((s) => s.id), { stroke: c } as Partial<DesignElement>)} />
+          </div>
+          {shapes.length === 1 && (
+            <label className="inspector__field">
+              <span className="inspector__label">Shape</span>
+              <select className="select" aria-label="Change the shape" value={shapes[0].type} onChange={(e) => onChange([shapes[0].id], { type: e.target.value } as Partial<DesignElement>)}>
+                {SHAPES.map((x) => (
+                  <option key={x.type} value={x.type}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="inspector__row">
             <NumberField label="Border" value={(shapes[0] as { strokeWidth: number }).strokeWidth} min={0} max={200} onChange={(v) => onChange(shapes.map((s) => s.id), { strokeWidth: v } as Partial<DesignElement>)} />
             {shapes[0].type === 'rect' && (
               <NumberField label="Corners" value={(shapes[0] as { radius: number }).radius} min={0} max={2000} onChange={(v) => onChange(shapes.map((s) => s.id), { radius: v } as Partial<DesignElement>)} />
             )}
           </div>
+        </Section>
+      )}
+
+      {paths.length > 0 && (
+        <Section title={paths.length > 1 ? 'Paths' : 'Path'}>
+          <PathFields paths={paths} onChange={onChange} />
         </Section>
       )}
 
@@ -325,8 +358,13 @@ export function Inspector(props: InspectorProps) {
               <ImageUp {...ICON} /> Replace
             </button>
           </div>
+          <PictureFields el={one} onChange={onChange} />
         </Section>
       )}
+
+      <Section title="Effects">
+        <EffectsFields selected={selected} onChange={onChange} />
+      </Section>
 
       <Section title="When presenting">
         <label className="inspector__field">
@@ -346,6 +384,38 @@ export function Inspector(props: InspectorProps) {
         </label>
         {selected[0].appear && (
           <p className="inspector__hint muted">Elements come in one after another, from the bottom layer up.</p>
+        )}
+        {one && (
+          <label className="inspector__field">
+            <span className="inspector__label">Clicking it opens</span>
+            <select
+              className="select"
+              aria-label="What clicking it opens when presenting"
+              value={!one.link ? 'none' : one.link.startsWith('page:') ? one.link : 'web'}
+              onChange={(e) => {
+                const v = e.target.value;
+                set({ link: v === 'none' ? undefined : v === 'web' ? (one.link?.startsWith('https://') ? one.link : 'https://') : v });
+              }}
+            >
+              <option value="none">Nothing</option>
+              <option value="web">A web page</option>
+              {Array.from({ length: props.pageCount ?? 0 }, (_, i) => (
+                <option key={i} value={`page:${i + 1}`}>
+                  Page {i + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {one?.link && !one.link.startsWith('page:') && (
+          <input
+            className="input input--sm"
+            type="url"
+            aria-label="Web address"
+            placeholder="https://"
+            value={one.link}
+            onChange={(e) => set({ link: e.target.value })}
+          />
         )}
       </Section>
 
@@ -424,11 +494,13 @@ export function labelFor(el: DesignElement): string {
       return 'Circle';
     case 'triangle':
       return 'Triangle';
-    case 'star':
-      return 'Star';
     case 'line':
       return el.arrow ? 'Arrow' : 'Line';
     case 'image':
       return 'Picture';
+    case 'path':
+      return el.closed ? 'Pen shape' : 'Drawing';
+    default:
+      return SHAPES.find((x) => x.type === el.type)?.label ?? 'Shape';
   }
 }

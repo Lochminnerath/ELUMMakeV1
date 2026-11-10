@@ -1479,3 +1479,214 @@
   background: var(--make);
   box-shadow: 0 0 0 4px var(--make-mist);
 }
+
+/* ================================================================ design studio */
+
+/* The grid moving snaps to. */
+.stage__grid line {
+  stroke: color-mix(in srgb, var(--guide) 22%, transparent);
+  pointer-events: none;
+}
+
+/* The pen, the brush, and editing a path's points. */
+.stage__tool-layer {
+  cursor: crosshair;
+}
+.stage__tool-layer[data-tool='draw'] {
+  cursor: cell;
+}
+.stage__pen-point {
+  fill: #ffffff;
+  stroke: var(--guide);
+}
+.stage__pen-point[data-first] {
+  fill: var(--guide);
+}
+.stage__path-edit {
+  stroke: var(--guide);
+  pointer-events: none;
+}
+.stage__handle--point {
+  cursor: move;
+}
+
+/* The floating bar while the pen or the brush is in use. */
+.editor__toolbar-float {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px 6px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 12px 30px -14px rgba(20, 26, 46, 0.35);
+  transform: translateX(-50%);
+  animation: float-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+.editor__toolbar-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+.editor__toolbar-width {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.editor__toolbar-width input {
+  width: 90px;
+  accent-color: var(--make-deep);
+}
+.editor__toolbar-hint {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .editor__toolbar-hint {
+    display: none;
+  }
+}
+.tool[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--make) 16%, transparent);
+  color: var(--make-deep);
+}
+
+/* Sliders: a label, the slider and its number, in one line. */
+.slider {
+  display: grid;
+  grid-template-columns: 92px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.slider__label {
+  color: var(--ink-muted);
+}
+.slider input {
+  width: 100%;
+  accent-color: var(--make-deep);
+}
+.slider__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+.inspector__group {
+  display: grid;
+  gap: 8px;
+}
+.inspector__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.inspector__check input {
+  accent-color: var(--make-deep);
+}
+.inspector__checks {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+/* A fill: colour or gradient. */
+.paint-field {
+  display: grid;
+  gap: 8px;
+}
+.segmented--sm button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.paint-field__gradient {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.paint-field__gradient .slider {
+  grid-column: 1 / -1;
+}
+.paint-field__preview {
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+}
+
+/* Picture filters, as small swatches of the same colourful square. */
+.photo-filters {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.photo-filters__item {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.photo-filters__item[aria-pressed='true'] {
+  border-color: var(--make);
+  color: var(--ink);
+}
+.photo-filters__swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 30% 35%, #ffd27a 0 18%, transparent 19%),
+    linear-gradient(180deg, #7bc4f0 0 55%, #3fae7a 55% 70%, #2f7d5b 70%);
+}
+
+/* Shapes a picture can sit inside. */
+.mask-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.mask-grid__item {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.mask-grid__item[aria-pressed='true'] {
+  border-color: var(--make);
+  background: color-mix(in srgb, var(--make) 12%, var(--surface));
+  color: var(--make-deep);
+}
+
+.color-pop__dropper {
+  flex: none;
+}
+
+/* Presenting: linked elements show they can be clicked. */
+.present__link {
+  cursor: pointer;
+}
