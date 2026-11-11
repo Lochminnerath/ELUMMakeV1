@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import type { DesignElement, LineElement, Page, TextElement } from '../api/types';
-import { bounds, intersects, rotatePoint, snap, textHeight, unionBox, type Box, type Guide } from './model';
+import type { DesignElement, LineElement, Page, PathElement, TextElement } from '../api/types';
+import { bounds, intersects, newPath, pathD, rotatePoint, simplifyPoints, snap, textHeight, unionBox, type Box, type Guide } from './model';
 import { PageBackground, PlacedElement } from './render';
+
+/** What a press on the page does: pick and move, place pen points, or draw freehand. */
+export type Tool = 'select' | 'pen' | 'draw';
+
+export interface PenStyle {
+  stroke: string;
+  strokeWidth: number;
+  /** The fill a closed pen shape gets. */
+  fill: string;
+}
+
+type Pt = { x: number; y: number };
 
 /**
  * The page being edited. Everything is drawn in page pixels inside one SVG and scaled by `zoom`;
@@ -26,7 +38,9 @@ type Drag =
   | { kind: 'resize'; handle: (typeof HANDLES)[number]; el: DesignElement }
   | { kind: 'rotate'; el: DesignElement }
   | { kind: 'line'; end: 'start' | 'end'; el: LineElement }
-  | { kind: 'marquee'; start: { x: number; y: number }; additive: string[] };
+  | { kind: 'marquee'; start: { x: number; y: number }; additive: string[] }
+  | { kind: 'draw'; points: Pt[] }
+  | { kind: 'point'; el: PathElement; index: number };
 
 export interface CanvasProps {
   page: Page;
@@ -49,6 +63,15 @@ export interface CanvasProps {
   pinMode?: boolean;
   onPlacePin?(at: { x: number; y: number }): void;
   onOpenPin?(id: string): void;
+  /** The pen or the brush instead of picking (select is the default). */
+  tool?: Tool;
+  penStyle?: PenStyle;
+  /** A finished pen or brush path, to add to the page. */
+  onCreate?(el: DesignElement): void;
+  /** Leaves the pen or brush for picking again. */
+  onToolDone?(): void;
+  /** A grid, every this many page pixels, that moving snaps to. 0 or missing: no grid. */
+  grid?: number;
 }
 
 export interface CanvasPin {
@@ -61,7 +84,29 @@ export interface CanvasPin {
   pending?: boolean;
 }
 
-export function Canvas({ page, width, height, zoom, selection, readOnly, editingId, onSelect, onEditText, onPreview, onCommit, onDropFiles, pins = [], pinMode = false, onPlacePin, onOpenPin }: CanvasProps) {
+export function Canvas({
+  page,
+  width,
+  height,
+  zoom,
+  selection,
+  readOnly,
+  editingId,
+  onSelect,
+  onEditText,
+  onPreview,
+  onCommit,
+  onDropFiles,
+  pins = [],
+  pinMode = false,
+  onPlacePin,
+  onOpenPin,
+  tool = 'select',
+  penStyle = { stroke: '#141a2e', strokeWidth: 4, fill: '#bacafc' },
+  onCreate,
+  onToolDone,
+  grid = 0,
+}: CanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
   // The second press of a double-click on a text. The page holds the pointer while dragging, so the
@@ -70,6 +115,10 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
   const [guides, setGuides] = useState<Guide[]>([]);
   const [marquee, setMarquee] = useState<Box | null>(null);
   const [dropping, setDropping] = useState(false);
+  // The pen's points so far, and where the pointer is, for the line still to be placed.
+  const [pen, setPen] = useState<Pt[]>([]);
+  const [hover, setHover] = useState<Pt | null>(null);
+  const [stroke2, setStroke2] = useState<Pt[] | null>(null);
 
   const toPage = (e: { clientX: number; clientY: number }) => {
     const rect = svgRef.current!.getBoundingClientRect();
@@ -92,7 +141,7 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
     if (editingId === el.id) return;
     const previous = lastPress.current;
     lastPress.current = { id: el.id, at: e.timeStamp };
-    if (previous?.id === el.id && e.timeStamp - previous.at < 450 && !e.shiftKey && !readOnly && el.type === 'text' && !el.locked) {
+    if (previous?.id === el.id && e.timeStamp - previous.at < 450 && !e.shiftKey && !readOnly && (el.type === 'text' || el.type === 'path') && !el.locked) {
       lastPress.current = null;
       onSelect([el.id]);
       onEditText(el.id);
@@ -137,6 +186,24 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
     if (!d) return;
     const p = toPage(e);
 
+    if (d.kind === 'draw') {
+      const last = d.points[d.points.length - 1];
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) * zoom >= 2) {
+        d.points.push(p);
+        setStroke2([...d.points]);
+      }
+      return;
+    }
+
+    if (d.kind === 'point') {
+      // One point of a path, moved; the box grows or shrinks to fit the points again.
+      const abs = d.el.points.map(([px, py]) => ({ x: d.el.x + px * d.el.w, y: d.el.y + py * d.el.h }));
+      abs[d.index] = p;
+      const next = newPath(abs, d.el);
+      updateElements((el) => (el.id === d.el.id ? { ...d.el, x: next.x, y: next.y, w: next.w, h: next.h, points: next.points } : el));
+      return;
+    }
+
     if (d.kind === 'marquee') {
       const rect = { x: Math.min(d.start.x, p.x), y: Math.min(d.start.y, p.y), w: Math.abs(p.x - d.start.x), h: Math.abs(p.y - d.start.y) };
       setMarquee(rect);
@@ -156,7 +223,11 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
         else dx = 0;
       }
       let found: Guide[] = [];
-      if (!e.altKey) {
+      if (grid > 0 && !e.altKey) {
+        // On the grid: the moving box's top-left corner lands on the nearest grid point.
+        dx = Math.round((d.box.x + dx) / grid) * grid - d.box.x;
+        dy = Math.round((d.box.y + dy) / grid) * grid - d.box.y;
+      } else if (!e.altKey) {
         const s = snap({ ...d.box, x: d.box.x + dx, y: d.box.y + dy }, d.others, { width, height }, 6 / zoom);
         dx += s.dx;
         dy += s.dy;
@@ -248,8 +319,82 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
     drag.current = null;
     setGuides([]);
     setMarquee(null);
+    if (d?.kind === 'draw') {
+      setStroke2(null);
+      const pts = simplifyPoints(d.points, 1.2 / zoom);
+      if (pts.length >= 2) onCreate?.(newPath(pts, { closed: false, smooth: true, stroke: penStyle.stroke, strokeWidth: penStyle.strokeWidth, fill: 'none' }));
+      return;
+    }
     if (d && d.kind !== 'marquee' && (d.kind !== 'move' || d.moved)) onCommit();
   };
+
+  // ------------------------------------------------------------- the pen
+
+  const finishPen = (closed: boolean, points = pen) => {
+    setPen([]);
+    setHover(null);
+    if (points.length >= 2) {
+      onCreate?.(newPath(points, { closed, smooth: false, stroke: penStyle.stroke, strokeWidth: penStyle.strokeWidth, fill: closed ? penStyle.fill : 'none' }));
+    }
+  };
+
+  const startTool = (e: ReactPointerEvent) => {
+    if (e.button !== 0 || readOnly) return;
+    e.stopPropagation();
+    const p = toPage(e);
+    if (tool === 'draw') {
+      svgRef.current!.setPointerCapture(e.pointerId);
+      drag.current = { kind: 'draw', points: [p] };
+      setStroke2([p]);
+      return;
+    }
+    // The pen: a click places a point; a click on the first point closes the shape; a double
+    // click (or Enter) ends an open line.
+    const first = pen[0];
+    if (first && pen.length >= 3 && Math.hypot(p.x - first.x, p.y - first.y) * zoom < 12) {
+      finishPen(true);
+      return;
+    }
+    let at = p;
+    if (e.shiftKey && pen.length) {
+      const prev = pen[pen.length - 1];
+      const a = Math.round(Math.atan2(p.y - prev.y, p.x - prev.x) / (Math.PI / 4)) * (Math.PI / 4);
+      const len = Math.hypot(p.x - prev.x, p.y - prev.y);
+      at = { x: prev.x + Math.cos(a) * len, y: prev.y + Math.sin(a) * len };
+    }
+    const prev = pen[pen.length - 1];
+    if (prev && e.detail >= 2 && Math.hypot(at.x - prev.x, at.y - prev.y) * zoom < 6) {
+      finishPen(false);
+      return;
+    }
+    setPen((list) => [...list, at]);
+  };
+
+  // Enter ends the pen's line, Escape ends it too (or leaves the tool when nothing is placed).
+  useEffect(() => {
+    if (tool === 'select') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (tool === 'pen' && pen.length >= 2) finishPen(e.key === 'Enter' ? false : false);
+      else {
+        setPen([]);
+        onToolDone?.();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+
+  // Changing tools drops a half-placed pen line.
+  useEffect(() => {
+    setPen([]);
+    setHover(null);
+  }, [tool]);
+
+  const editingPath = editingId ? (page.elements.find((el) => el.id === editingId && el.type === 'path') as PathElement | undefined) : undefined;
+  const pointEditable = editingPath && !editingPath.rotation && !editingPath.flipX && !editingPath.flipY;
 
   // ------------------------------------------------------------- pictures dropped in
 
@@ -296,6 +441,16 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
         aria-label="Page"
       >
         <PageBackground page={page} width={width} height={height} />
+        {grid > 0 && (
+          <g className="stage__grid" aria-hidden="true">
+            {Array.from({ length: Math.floor(width / grid) }, (_, i) => (
+              <line key={`gx${i}`} x1={(i + 1) * grid} x2={(i + 1) * grid} y1={0} y2={height} strokeWidth={stroke * 0.7} />
+            ))}
+            {Array.from({ length: Math.floor(height / grid) }, (_, i) => (
+              <line key={`gy${i}`} x1={0} x2={width} y1={(i + 1) * grid} y2={(i + 1) * grid} strokeWidth={stroke * 0.7} />
+            ))}
+          </g>
+        )}
         {page.elements.map((el) => (
           <g
             key={el.id}
@@ -397,6 +552,57 @@ export function Canvas({ page, width, height, zoom, selection, readOnly, editing
           ),
         )}
         {marquee && <rect className="stage__marquee" x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} strokeWidth={stroke} />}
+
+        {/* Editing a path's points: each point is a handle to drag. */}
+        {editingPath && pointEditable && !readOnly && (
+          <g>
+            <path
+              className="stage__path-edit"
+              d={pathD(editingPath)}
+              transform={`translate(${editingPath.x} ${editingPath.y})`}
+              strokeWidth={stroke}
+              fill="none"
+            />
+            {editingPath.points.map(([px, py], i) => (
+              <circle
+                key={i}
+                className="stage__handle stage__handle--point"
+                cx={editingPath.x + px * editingPath.w}
+                cy={editingPath.y + py * editingPath.h}
+                r={handleSize / 1.5}
+                strokeWidth={stroke}
+                onPointerDown={(e) => startHandle(e, { kind: 'point', el: editingPath, index: i })}
+              />
+            ))}
+          </g>
+        )}
+
+        {/* The pen's line so far, the brush's stroke so far, and a layer that takes the presses. */}
+        {pen.length > 0 && (
+          <g className="stage__pen" pointerEvents="none">
+            <polyline points={[...pen, ...(hover ? [hover] : [])].map((q) => `${q.x},${q.y}`).join(' ')} fill="none" stroke={penStyle.stroke} strokeWidth={Math.max(penStyle.strokeWidth, stroke)} strokeLinejoin="round" strokeLinecap="round" opacity={0.85} />
+            {pen.map((q, i) => (
+              <circle key={i} className="stage__pen-point" data-first={i === 0 || undefined} cx={q.x} cy={q.y} r={(i === 0 ? 6 : 4.5) / zoom} strokeWidth={stroke} />
+            ))}
+          </g>
+        )}
+        {stroke2 && stroke2.length > 1 && (
+          <polyline pointerEvents="none" points={stroke2.map((q) => `${q.x},${q.y}`).join(' ')} fill="none" stroke={penStyle.stroke} strokeWidth={penStyle.strokeWidth} strokeLinejoin="round" strokeLinecap="round" />
+        )}
+        {tool !== 'select' && !readOnly && (
+          <rect
+            className="stage__tool-layer"
+            data-tool={tool}
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            fill="transparent"
+            onPointerDown={startTool}
+            onPointerMove={(e) => tool === 'pen' && pen.length > 0 && setHover(toPage(e))}
+            aria-label={tool === 'pen' ? 'Click to place points. Click the first point to close the shape, or press Enter to finish.' : 'Draw with the pointer'}
+          />
+        )}
       </svg>
 
       {pins.map((p) => (

@@ -29,6 +29,39 @@ export const APP_NAME = 'Make';
 
 export const RELEASES: Release[] = [
   {
+    id: '2026-11-10-design-studio',
+    date: '10 November 2026',
+    title: 'A design studio, in Make',
+    intro: 'Draw your own shapes, add depth and colour, and design logos, cards, app screens and web pages. All of it by hand, none of it by AI.',
+    features: [
+      {
+        title: 'The pen and the brush',
+        text: 'Press P and click to place points; click the first point to close the shape. Press B to draw freehand. Double-click any drawing to move its points.',
+        art: 'spark',
+      },
+      {
+        title: 'Twelve shapes and gradient fills',
+        text: 'Diamonds, hexagons, hearts, bursts, speech bubbles and more. Any shape can be filled with a gradient, and you can change one shape into another.',
+        art: 'layers',
+      },
+      {
+        title: 'Shadows, blur and blend modes',
+        text: 'Give anything a soft shadow, blur it, flip it, or blend it with what is underneath, the way design tools do.',
+        art: 'layers',
+      },
+      {
+        title: 'Pictures that look their best',
+        text: 'Eight filters, sliders for light and colour, and shapes to show a picture inside. Text can have an outline, a highlight and capitals.',
+        art: 'check',
+      },
+      {
+        title: 'Screens, pages and ten new templates',
+        text: 'New sizes for logos, business cards, websites and phone screens, a grid that snaps, links that work while presenting, and resizing that scales everything to fit.',
+        art: 'devices',
+      },
+    ],
+  },
+  {
     id: '2026-10-22-studio',
     date: '22 October 2026',
     title: 'Make, grown up',
