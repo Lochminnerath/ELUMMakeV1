@@ -2,7 +2,7 @@
 .editor {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: calc(100dvh - var(--host-badge-h));
   overflow: hidden;
   background: var(--canvas);
 }
@@ -709,7 +709,7 @@
 .editor__exporting {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: calc(24px + var(--host-badge-h));
   transform: translateX(-50%);
   z-index: 60;
   padding: 10px 16px;
@@ -745,7 +745,7 @@
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 64px;
+    bottom: calc(64px + var(--host-badge-h));
     z-index: 30;
     width: auto;
     max-height: 55dvh;
