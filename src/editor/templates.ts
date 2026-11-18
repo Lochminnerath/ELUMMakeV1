@@ -1,5 +1,6 @@
 import type { DesignContent, DesignKind, Page, TextElement } from '../api/types';
 import { newPage, newShape, newText, PAGE_SIZES, textHeight, uid } from './model';
+import { STUDIO_TEMPLATES } from './studioTemplates';
 
 /** Starting points on the home page. Each builds fresh content (new ids) every time. */
 
@@ -412,4 +413,6 @@ export const TEMPLATES: Template[] = [
     ...dims('slides-16x9'),
     build: () => banner('slides-16x9', '#141a2e', 'How I did it', 'In 10 minutes', '#e9b949'),
   },
+  // The design studio's templates: logos, cards, screens, pages and posts.
+  ...STUDIO_TEMPLATES,
 ];
