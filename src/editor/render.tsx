@@ -1,7 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { api } from '../api';
-import type { DesignElement, ImageElement, Page, TextElement } from '../api/types';
-import { layoutText, parseBackground, starPoints } from './model';
+import type { DesignElement, ImageElement, Page, PathElement, ShapeElement, TextElement } from '../api/types';
+import { filterCss, isShape, layoutText, parseBackground, pathD, shapePath, textWidth } from './model';
 
 /**
  * Draws pages as SVG: the canvas, thumbnails, the page strip and presenting all use this, so a
@@ -54,12 +54,71 @@ export function PageBackground({ page, width, height }: { page: Page; width: num
   );
 }
 
+/** A fill that may be a gradient: the gradient is defined beside it, and the fill points to it. */
+function usePaint(paint: string, prefix: string): { fill: string; defs: ReactNode } {
+  const id = `${prefix}-${useId().replace(/:/g, '')}`;
+  const p = parseBackground(paint);
+  if (paint === 'none') return { fill: 'none', defs: null };
+  if ('color' in p) return { fill: p.color, defs: null };
+  const r = ((p.gradient.angle - 90) * Math.PI) / 180;
+  const x = Math.cos(r) / 2;
+  const y = Math.sin(r) / 2;
+  return {
+    fill: `url(#${id})`,
+    defs: (
+      <defs>
+        <linearGradient id={id} x1={0.5 - x} y1={0.5 - y} x2={0.5 + x} y2={0.5 + y}>
+          <stop offset="0" stopColor={p.gradient.from} />
+          <stop offset="1" stopColor={p.gradient.to} />
+        </linearGradient>
+      </defs>
+    ),
+  };
+}
+
+function Shape({ el }: { el: ShapeElement }) {
+  const paint = usePaint(el.fill, 'fill');
+  return (
+    <>
+      {paint.defs}
+      <path d={shapePath(el.type, el.w, el.h, el.radius)} fill={paint.fill} stroke={el.strokeWidth > 0 ? el.stroke : 'none'} strokeWidth={el.strokeWidth} strokeLinejoin="round" />
+    </>
+  );
+}
+
+function PathShape({ el }: { el: PathElement }) {
+  const paint = usePaint(el.closed ? el.fill : 'none', 'path');
+  return (
+    <>
+      {paint.defs}
+      <path
+        d={pathD(el)}
+        fill={paint.fill}
+        stroke={el.strokeWidth > 0 ? el.stroke : 'none'}
+        strokeWidth={el.strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
+  );
+}
+
 function TextShape({ el, hideText }: { el: TextElement; hideText?: boolean }) {
   const lines = layoutText(el);
   const lineH = el.fontSize * el.lineHeight;
   const x = el.align === 'center' ? el.w / 2 : el.align === 'right' ? el.w : 0;
   const anchor = el.align === 'center' ? 'middle' : el.align === 'right' ? 'end' : 'start';
+  const pad = el.fontSize * 0.12;
   return (
+    <>
+    {el.highlight &&
+      !hideText &&
+      lines.map((line, i) => {
+        if (!line.trim()) return null;
+        const w = textWidth(line, el);
+        const left = el.align === 'center' ? x - w / 2 : el.align === 'right' ? x - w : x;
+        return <rect key={`hl-${i}`} x={left - pad} y={i * lineH + (lineH - el.fontSize) / 2 - pad / 2} width={w + pad * 2} height={el.fontSize + pad} rx={pad} fill={el.highlight} />;
+      })}
     <text
       fontFamily={`"${el.fontFamily}", Manrope, system-ui, sans-serif`}
       fontSize={el.fontSize}
@@ -68,6 +127,10 @@ function TextShape({ el, hideText }: { el: TextElement; hideText?: boolean }) {
       textDecoration={el.underline ? 'underline' : undefined}
       letterSpacing={el.letterSpacing || undefined}
       fill={el.color}
+      stroke={el.outline && el.outline.width > 0 ? el.outline.color : undefined}
+      strokeWidth={el.outline && el.outline.width > 0 ? el.outline.width : undefined}
+      strokeLinejoin="round"
+      paintOrder="stroke"
       textAnchor={anchor}
       opacity={hideText ? 0 : 1}
       style={{ whiteSpace: 'pre' }}
@@ -79,6 +142,7 @@ function TextShape({ el, hideText }: { el: TextElement; hideText?: boolean }) {
         </tspan>
       ))}
     </text>
+    </>
   );
 }
 
@@ -89,7 +153,7 @@ function ImageShape({ el }: { el: ImageElement }) {
     <>
       <defs>
         <clipPath id={`clip-${id}`}>
-          <rect width={el.w} height={el.h} rx={el.radius} />
+          {el.mask && el.mask !== 'rect' ? <path d={shapePath(el.mask, el.w, el.h)} /> : <rect width={el.w} height={el.h} rx={el.radius} />}
         </clipPath>
       </defs>
       {url ? (
@@ -101,7 +165,7 @@ function ImageShape({ el }: { el: ImageElement }) {
           clipPath={`url(#clip-${id})`}
         />
       ) : (
-        <rect width={el.w} height={el.h} rx={el.radius} fill="#e2e5ee" />
+        <rect width={el.w} height={el.h} rx={el.radius} fill="#e2e5ee" clipPath={`url(#clip-${id})`} />
       )}
     </>
   );
@@ -113,6 +177,8 @@ export function ElementShape({ el, hideText }: { el: DesignElement; hideText?: b
       return <TextShape el={el} hideText={hideText} />;
     case 'image':
       return <ImageShape el={el} />;
+    case 'path':
+      return <PathShape el={el} />;
     case 'line': {
       const id = `arrow-${el.id}`;
       return (
@@ -138,25 +204,27 @@ export function ElementShape({ el, hideText }: { el: DesignElement; hideText?: b
         </>
       );
     }
-    default: {
-      const common = { fill: el.fill, stroke: el.strokeWidth > 0 ? el.stroke : 'none', strokeWidth: el.strokeWidth };
-      if (el.type === 'rect') return <rect width={el.w} height={el.h} rx={Math.min(el.radius, el.w / 2, el.h / 2)} {...common} />;
-      if (el.type === 'ellipse') return <ellipse cx={el.w / 2} cy={el.h / 2} rx={el.w / 2} ry={el.h / 2} {...common} />;
-      if (el.type === 'triangle') return <polygon points={`${el.w / 2},0 ${el.w},${el.h} 0,${el.h}`} strokeLinejoin="round" {...common} />;
-      return <polygon points={starPoints(el.w, el.h)} strokeLinejoin="round" {...common} />;
-    }
+    default:
+      return isShape(el) ? <Shape el={el} /> : null;
   }
+}
+
+/** The move, turn and mirror that put an element in place, as an SVG transform. */
+export function placeTransform(el: DesignElement): string {
+  if (el.type === 'line') return `translate(${el.x} ${el.y})`;
+  let t = `translate(${el.x} ${el.y})`;
+  if (el.rotation) t += ` rotate(${el.rotation} ${el.w / 2} ${el.h / 2})`;
+  if (el.flipX || el.flipY) t += ` translate(${el.flipX ? el.w : 0} ${el.flipY ? el.h : 0}) scale(${el.flipX ? -1 : 1} ${el.flipY ? -1 : 1})`;
+  return t;
 }
 
 /** One element, moved and rotated into place on its page. */
 export function PlacedElement({ el, hideText }: { el: DesignElement; hideText?: boolean }) {
   if (el.hidden) return null;
-  const transform =
-    el.type === 'line' || !el.rotation
-      ? `translate(${el.x} ${el.y})`
-      : `translate(${el.x} ${el.y}) rotate(${el.rotation} ${el.w / 2} ${el.h / 2})`;
+  const filter = filterCss(el);
+  const blend = el.blend && el.blend !== 'normal' ? el.blend : undefined;
   return (
-    <g transform={transform} opacity={el.opacity}>
+    <g transform={placeTransform(el)} opacity={el.opacity} style={filter || blend ? { filter, mixBlendMode: blend } : undefined}>
       <ElementShape el={el} hideText={hideText} />
     </g>
   );

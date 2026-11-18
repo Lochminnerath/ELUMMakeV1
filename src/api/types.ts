@@ -74,7 +74,20 @@ export type PageTransition = 'none' | 'fade' | 'slide';
 /** How an element comes in when presenting, one after another in layer order. */
 export type Appear = 'fade' | 'slide' | 'scale';
 
-export type ElementType = 'text' | 'rect' | 'ellipse' | 'triangle' | 'star' | 'line' | 'image';
+/** The ready-made shapes, drawn from their box (see shapePath in editor/model.ts). */
+export type ShapeType = 'rect' | 'ellipse' | 'triangle' | 'star' | 'diamond' | 'pentagon' | 'hexagon' | 'heart' | 'arrow' | 'bubble' | 'cross' | 'burst';
+
+export type ElementType = 'text' | ShapeType | 'line' | 'image' | 'path';
+
+/** How an element mixes with what is under it, as in design tools' blend modes. */
+export type Blend = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'difference' | 'luminosity';
+
+export interface Shadow {
+  x: number;
+  y: number;
+  blur: number;
+  color: string;
+}
 
 interface BaseElement {
   id: string;
@@ -94,6 +107,16 @@ interface BaseElement {
   groupId?: string;
   /** Present mode: the element comes in on a click, with this effect. */
   appear?: Appear;
+  /** Mirrored across its middle, side to side or top to bottom. */
+  flipX?: boolean;
+  flipY?: boolean;
+  /** A soft shadow behind it. */
+  shadow?: Shadow;
+  /** A blur over the whole element, in page pixels. */
+  blur?: number;
+  blend?: Blend;
+  /** Present mode: clicking the element opens this https link, or goes to this page ("page:<n>"). */
+  link?: string;
 }
 
 export interface TextElement extends BaseElement {
@@ -108,10 +131,17 @@ export interface TextElement extends BaseElement {
   color: string;
   lineHeight: number;
   letterSpacing: number;
+  /** An outline drawn around each letter. */
+  outline?: { color: string; width: number };
+  /** Shown in capitals, whatever was typed. */
+  uppercase?: boolean;
+  /** A band of colour behind each line, like a highlighter. */
+  highlight?: string;
 }
 
 export interface ShapeElement extends BaseElement {
-  type: 'rect' | 'ellipse' | 'triangle' | 'star';
+  type: ShapeType;
+  /** A colour, or a gradient written as "linear:<angle>:<from>:<to>". */
   fill: string;
   stroke: string;
   strokeWidth: number;
@@ -134,9 +164,39 @@ export interface ImageElement extends BaseElement {
   src: string;
   fit: 'cover' | 'contain';
   radius: number;
+  /** The picture shown inside a shape instead of its rectangle. */
+  mask?: ShapeType;
+  /** Light, contrast and colour: 100 is as taken; grayscale and sepia go from 0 to 100. */
+  adjust?: ImageAdjust;
 }
 
-export type DesignElement = TextElement | ShapeElement | LineElement | ImageElement;
+export interface ImageAdjust {
+  brightness: number;
+  contrast: number;
+  saturate: number;
+  grayscale: number;
+  sepia: number;
+  /** Turns every colour round the colour wheel, in degrees. */
+  hue: number;
+}
+
+/**
+ * A vector drawn with the pen or the brush. Points are fractions of its box (0 to 1), so it
+ * stretches with the box like every other element.
+ */
+export interface PathElement extends BaseElement {
+  type: 'path';
+  points: [number, number][];
+  closed: boolean;
+  /** Curves through the points instead of straight lines between them. */
+  smooth: boolean;
+  /** A colour, a gradient as for shapes, or "none". */
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+}
+
+export type DesignElement = TextElement | ShapeElement | LineElement | ImageElement | PathElement;
 
 export interface DesignSummary {
   id: string;

@@ -1,6 +1,6 @@
 import { api } from '../api';
 import type { DesignElement, Page, TextElement } from '../api/types';
-import { fontString, layoutText, parseBackground } from './model';
+import { filterCss, fontString, isShape, layoutText, parseBackground, pathD, shapePath } from './model';
 
 /**
  * Exports: each page drawn onto a canvas, then saved as PNG, or gathered into a PDF.
@@ -29,10 +29,36 @@ function roundedRect(ctx: CanvasRenderingContext2D, w: number, h: number, r: num
   ctx.roundRect(0, 0, w, h, radius);
 }
 
+/** A colour or gradient paint for the canvas, across a w × h box (as render.tsx does). */
+function paintStyle(ctx: CanvasRenderingContext2D, paint: string, w: number, h: number): string | CanvasGradient {
+  const p = parseBackground(paint);
+  if ('color' in p) return p.color;
+  const r = ((p.gradient.angle - 90) * Math.PI) / 180;
+  const dx = (Math.cos(r) * w) / 2;
+  const dy = (Math.sin(r) * h) / 2;
+  const g = ctx.createLinearGradient(w / 2 - dx, h / 2 - dy, w / 2 + dx, h / 2 + dy);
+  g.addColorStop(0, p.gradient.from);
+  g.addColorStop(1, p.gradient.to);
+  return g;
+}
+
 function drawText(ctx: CanvasRenderingContext2D, el: TextElement) {
   const lines = layoutText(el);
   const lineH = el.fontSize * el.lineHeight;
   ctx.font = fontString(el);
+  if (el.highlight) {
+    const pad = el.fontSize * 0.12;
+    ctx.fillStyle = el.highlight;
+    const hx = el.align === 'center' ? el.w / 2 : el.align === 'right' ? el.w : 0;
+    lines.forEach((line, i) => {
+      if (!line.trim()) return;
+      const w = ctx.measureText(line).width + el.letterSpacing * line.length;
+      const left = el.align === 'center' ? hx - w / 2 : el.align === 'right' ? hx - w : hx;
+      ctx.beginPath();
+      ctx.roundRect(left - pad, i * lineH + (lineH - el.fontSize) / 2 - pad / 2, w + pad * 2, el.fontSize + pad, pad);
+      ctx.fill();
+    });
+  }
   ctx.fillStyle = el.color;
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = el.align;
@@ -40,6 +66,13 @@ function drawText(ctx: CanvasRenderingContext2D, el: TextElement) {
   const x = el.align === 'center' ? el.w / 2 : el.align === 'right' ? el.w : 0;
   lines.forEach((line, i) => {
     const y = i * lineH + (lineH - el.fontSize) / 2 + el.fontSize * 0.8;
+    if (el.outline && el.outline.width > 0) {
+      // The outline goes under the letters, as on screen (paint-order: stroke).
+      ctx.strokeStyle = el.outline.color;
+      ctx.lineWidth = el.outline.width;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(line, x, y);
+    }
     ctx.fillText(line, x, y);
     if (el.underline && line) {
       const width = ctx.measureText(line).width;
@@ -53,11 +86,20 @@ async function drawElement(ctx: CanvasRenderingContext2D, el: DesignElement) {
   if (el.hidden) return;
   ctx.save();
   ctx.globalAlpha = el.opacity;
+  // Blur, shadow, picture adjustments and blend modes, as on screen. Browsers without canvas
+  // filters draw the element without them.
+  const filter = filterCss(el);
+  if (filter && 'filter' in ctx) ctx.filter = filter;
+  if (el.blend && el.blend !== 'normal') ctx.globalCompositeOperation = el.blend as GlobalCompositeOperation;
   ctx.translate(el.x, el.y);
   if (el.type !== 'line' && el.rotation) {
     ctx.translate(el.w / 2, el.h / 2);
     ctx.rotate((el.rotation * Math.PI) / 180);
     ctx.translate(-el.w / 2, -el.h / 2);
+  }
+  if (el.type !== 'line' && (el.flipX || el.flipY)) {
+    ctx.translate(el.flipX ? el.w : 0, el.flipY ? el.h : 0);
+    ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
   }
   if (el.type === 'text') drawText(ctx, el);
   else if (el.type === 'line') {
@@ -83,8 +125,11 @@ async function drawElement(ctx: CanvasRenderingContext2D, el: DesignElement) {
     }
   } else if (el.type === 'image') {
     const img = await loadImage(el.src);
-    roundedRect(ctx, el.w, el.h, el.radius);
-    ctx.clip();
+    if (el.mask && el.mask !== 'rect') ctx.clip(new Path2D(shapePath(el.mask, el.w, el.h)));
+    else {
+      roundedRect(ctx, el.w, el.h, el.radius);
+      ctx.clip();
+    }
     if (img) {
       const scale = el.fit === 'cover' ? Math.max(el.w / img.naturalWidth, el.h / img.naturalHeight) : Math.min(el.w / img.naturalWidth, el.h / img.naturalHeight);
       const w = img.naturalWidth * scale;
@@ -94,33 +139,28 @@ async function drawElement(ctx: CanvasRenderingContext2D, el: DesignElement) {
       ctx.fillStyle = '#e2e5ee';
       ctx.fillRect(0, 0, el.w, el.h);
     }
-  } else {
-    ctx.beginPath();
-    if (el.type === 'rect') ctx.roundRect(0, 0, el.w, el.h, Math.max(0, Math.min(el.radius, el.w / 2, el.h / 2)));
-    else if (el.type === 'ellipse') ctx.ellipse(el.w / 2, el.h / 2, el.w / 2, el.h / 2, 0, 0, Math.PI * 2);
-    else if (el.type === 'triangle') {
-      ctx.moveTo(el.w / 2, 0);
-      ctx.lineTo(el.w, el.h);
-      ctx.lineTo(0, el.h);
-      ctx.closePath();
-    } else {
-      for (let i = 0; i < 10; i++) {
-        const r = i % 2 === 0 ? 0.5 : 0.2;
-        const a = (Math.PI / 5) * i - Math.PI / 2;
-        const px = el.w / 2 + Math.cos(a) * r * el.w;
-        const py = el.h / 2 + Math.sin(a) * r * el.h * 1.05 + el.h * 0.03;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
+  } else if (el.type === 'path') {
+    const path = new Path2D(pathD(el));
+    if (el.closed && el.fill !== 'none') {
+      ctx.fillStyle = paintStyle(ctx, el.fill, el.w, el.h);
+      ctx.fill(path);
     }
-    ctx.fillStyle = el.fill;
-    ctx.fill();
+    if (el.strokeWidth > 0) {
+      ctx.strokeStyle = el.stroke;
+      ctx.lineWidth = el.strokeWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke(path);
+    }
+  } else if (isShape(el)) {
+    const path = new Path2D(shapePath(el.type, el.w, el.h, el.radius));
+    ctx.fillStyle = paintStyle(ctx, el.fill, el.w, el.h);
+    ctx.fill(path);
     if (el.strokeWidth > 0) {
       ctx.strokeStyle = el.stroke;
       ctx.lineWidth = el.strokeWidth;
       ctx.lineJoin = 'round';
-      ctx.stroke();
+      ctx.stroke(path);
     }
   }
   ctx.restore();

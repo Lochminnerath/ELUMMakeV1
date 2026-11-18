@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Circle, History, Image as ImageIcon, Layers, LayoutTemplate, MessageCircle, Minus, MoreHorizontal, MoveRight, Palette, PanelRight, Redo2, SlidersHorizontal, Slash, Square, Star, Triangle, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Brush, Circle, Diamond, Grid3x3, Heart, Hexagon, History, MessageSquare, PenTool, Plus, Image as ImageIcon, Layers, LayoutTemplate, MessageCircle, Minus, MoreHorizontal, MoveRight, Palette, PanelRight, Redo2, SlidersHorizontal, Slash, Square, Star, Triangle, Type, Undo2, ZoomIn, ZoomOut } from 'lucide-react';
 import { OfflineIcon, PresentIcon } from '../components/icons/ElumIcons';
 import { DownloadIcon } from '../components/icons/ElumIcons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -11,12 +11,13 @@ import { NotificationBell } from '../components/NotificationBell';
 import { useToast } from '../components/Toast';
 import { UserMenu } from '../components/UserMenu';
 import { useMediaQuery } from '../lib/hooks';
-import { Canvas } from './Canvas';
+import { Canvas, type PenStyle, type Tool } from './Canvas';
+import { ColorField } from './ColorField';
 import { exportPdf, exportPng, safeFilename } from './export';
 import { useHistory } from './history';
 import { Inspector, type Align, type Arrange } from './Inspector';
 import { LayersPanel } from './LayersPanel';
-import { alignElements, applyKitToPage, cloneElement, clonePage, copyStyle, distributeElements, expandGroups, groupElements, isOneGroup, newImage, newLine, newPage, newShape, newText, normalizeContent, pasteStyle, ungroupElements, type Style } from './model';
+import { alignElements, applyKitToPage, cloneElement, clonePage, copyStyle, distributeElements, expandGroups, groupElements, isOneGroup, newImage, newLine, newPage, newShape, newText, normalizeContent, pasteStyle, scaleContent, shapePath, ungroupElements, type Style } from './model';
 import { BrandPanel } from './BrandPanel';
 import { CommentsPanel, numberPins, type PinSpot } from './CommentsPanel';
 import { HistoryPanel } from './HistoryPanel';
@@ -106,6 +107,10 @@ function Editor({ initial }: { initial: Design }) {
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [commentsError, setCommentsError] = useState<string | null>(null);
   const [pinMode, setPinMode] = useState(false);
+  // The pen and the brush, their line, and the grid moving snaps to.
+  const [tool, setTool] = useState<Tool>('select');
+  const [penStyle, setPenStyle] = useState<PenStyle>({ stroke: '#141a2e', strokeWidth: 6, fill: '#bacafc' });
+  const [grid, setGrid] = useState(false);
   const [pendingPin, setPendingPin] = useState<PinSpot | null>(null);
   const [openComment, setOpenComment] = useState<string | null>(null);
   const [kits, setKits] = useState<BrandKit[] | null>(null);
@@ -472,9 +477,11 @@ function Editor({ initial }: { initial: Design }) {
     if (pageIndex === i) setPageIndex(j);
   };
 
-  const resize = async (width: number, height: number) => {
+  const resize = async (width: number, height: number, scale = false) => {
     try {
       await api.resizeDesign(initial.id, width, height);
+      // Resizing can also scale everything on the pages to fit, centred (one step to undo).
+      if (scale) history.change((c) => scaleContent(c, size, { width, height }));
       setSize({ width, height });
       setZoomMode('fit');
     } catch (e) {
@@ -602,6 +609,15 @@ function Editor({ initial }: { initial: Design }) {
         add(newShape(size, 'ellipse'));
       } else if (k === 'l' && !mod && !readOnly) {
         add(newLine(size));
+      } else if (k === 'p' && !mod && !readOnly) {
+        setTool((t) => (t === 'pen' ? 'select' : 'pen'));
+      } else if (k === 'b' && !mod && !readOnly) {
+        setTool((t) => (t === 'draw' ? 'select' : 'draw'));
+      } else if (k === "'" && mod) {
+        e.preventDefault();
+        setGrid((g) => !g);
+      } else if (k === 'v' && !mod) {
+        setTool('select');
       } else if (k === 'pagedown' || (k === ']' && mod)) {
         setPageIndex((i) => Math.min(content.pages.length - 1, i + 1));
       } else if (k === 'pageup' || (k === '[' && mod)) {
@@ -650,7 +666,15 @@ function Editor({ initial }: { initial: Design }) {
           { label: 'Rectangle', shortcut: 'R', icon: <Square size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'rect')) },
           { label: 'Circle', shortcut: 'O', icon: <Circle size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'ellipse')) },
           { label: 'Triangle', icon: <Triangle size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'triangle')) },
+          { label: 'Diamond', icon: <Diamond size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'diamond')) },
+          { label: 'Pentagon', icon: <ShapeGlyph type="pentagon" />, onSelect: () => add(newShape(size, 'pentagon')) },
+          { label: 'Hexagon', icon: <Hexagon size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'hexagon')) },
           { label: 'Star', icon: <Star size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'star')) },
+          { label: 'Burst', icon: <ShapeGlyph type="burst" />, onSelect: () => add(newShape(size, 'burst')) },
+          { label: 'Heart', icon: <Heart size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'heart')) },
+          { label: 'Arrow block', icon: <ShapeGlyph type="arrow" />, onSelect: () => add(newShape(size, 'arrow')) },
+          { label: 'Speech bubble', icon: <MessageSquare size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'bubble')) },
+          { label: 'Plus', icon: <Plus size={16} strokeWidth={1.75} />, onSelect: () => add(newShape(size, 'cross')) },
           'separator',
           { label: 'Line', shortcut: 'L', icon: <Slash size={16} strokeWidth={1.75} />, onSelect: () => add(newLine(size)) },
           { label: 'Arrow', icon: <MoveRight size={16} strokeWidth={1.75} />, onSelect: () => add(newLine(size, true)) },
@@ -662,6 +686,28 @@ function Editor({ initial }: { initial: Design }) {
           </button>
         )}
       />
+      <button
+        type="button"
+        className="tool"
+        data-tip="Pen (P): click to place points"
+        aria-pressed={tool === 'pen'}
+        disabled={readOnly}
+        onClick={() => setTool((t) => (t === 'pen' ? 'select' : 'pen'))}
+      >
+        <PenTool {...ICON} />
+        <span className="tool__label">Pen</span>
+      </button>
+      <button
+        type="button"
+        className="tool"
+        data-tip="Brush (B): draw freehand"
+        aria-pressed={tool === 'draw'}
+        disabled={readOnly}
+        onClick={() => setTool((t) => (t === 'draw' ? 'select' : 'draw'))}
+      >
+        <Brush {...ICON} />
+        <span className="tool__label">Brush</span>
+      </button>
       <button type="button" className="tool" data-tip="Picture" disabled={readOnly} onClick={() => fileRef.current?.click()}>
         <ImageIcon {...ICON} />
         <span className="tool__label">Picture</span>
@@ -756,7 +802,8 @@ function Editor({ initial }: { initial: Design }) {
           readOnly={readOnly}
           onChange={changeElements}
           onPage={(changes) => changePage((p) => ({ ...p, ...changes }))}
-          onResize={(w, h) => void resize(w, h)}
+          onResize={(w, h, scale) => void resize(w, h, scale)}
+          pageCount={content.pages.length}
           onArrange={arrange}
           onAlign={align}
           onDistribute={distribute}
@@ -917,7 +964,30 @@ function Editor({ initial }: { initial: Design }) {
                 setOpenComment(id);
                 openPanel('comments');
               }}
+              tool={readOnly ? 'select' : tool}
+              penStyle={penStyle}
+              onCreate={(el) => add(el)}
+              onToolDone={() => setTool('select')}
+              grid={grid ? Math.round(Math.min(size.width, size.height) / 24) : 0}
             />
+            {tool !== 'select' && !readOnly && (
+              <div className="editor__toolbar-float" role="toolbar" aria-label={tool === 'pen' ? 'Pen' : 'Brush'}>
+                <span className="editor__toolbar-name">{tool === 'pen' ? 'Pen' : 'Brush'}</span>
+                <ColorField label="Line colour" value={penStyle.stroke} onChange={(c) => setPenStyle((s) => ({ ...s, stroke: c }))} />
+                <label className="editor__toolbar-width">
+                  <span className="visually-hidden">Line width</span>
+                  <input type="range" min={1} max={60} value={penStyle.strokeWidth} aria-label="Line width" onChange={(e) => setPenStyle((s) => ({ ...s, strokeWidth: Number(e.target.value) }))} />
+                  <span>{penStyle.strokeWidth}</span>
+                </label>
+                {tool === 'pen' && <ColorField label="Fill when closed" value={penStyle.fill} allowNone onChange={(c) => setPenStyle((s) => ({ ...s, fill: c }))} />}
+                <span className="editor__toolbar-hint muted">
+                  {tool === 'pen' ? 'Click to place points. Click the first point to close, or press Enter to finish.' : 'Drag to draw. Each stroke becomes its own drawing.'}
+                </span>
+                <button type="button" className="elum-btn elum-btn--secondary elum-btn--sm" onClick={() => setTool('select')}>
+                  Done
+                </button>
+              </div>
+            )}
             {pinMode && (
               <div className="editor__pin-hint" role="status">
                 Click the page where your comment goes.{' '}
@@ -951,6 +1021,9 @@ function Editor({ initial }: { initial: Design }) {
               </span>
             )}
             <span className="editor__zoom">
+              <button type="button" className="icon-btn" aria-label="Grid (Ctrl+')" data-tip="Grid (Ctrl+')" aria-pressed={grid} onClick={() => setGrid((g) => !g)}>
+                <Grid3x3 size={16} strokeWidth={1.75} />
+              </button>
               <button type="button" className="icon-btn" aria-label="Zoom out" onClick={() => setZoomMode(Math.max(0.05, Math.round((zoom / 1.25) * 100) / 100))}>
                 <ZoomOut size={16} strokeWidth={1.75} />
               </button>
@@ -1036,4 +1109,13 @@ function TitleSync({ title }: { title: string }) {
     };
   }, [title]);
   return null;
+}
+
+/** A small drawing of a shape Make has no ready icon for, for the Shapes menu. */
+function ShapeGlyph({ type }: { type: 'pentagon' | 'burst' | 'arrow' }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <path d={shapePath(type, 18, type === 'arrow' ? 12 : 18)} transform={type === 'arrow' ? 'translate(3 6)' : 'translate(3 3)'} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
+    </svg>
+  );
 }
